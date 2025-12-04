@@ -1,0 +1,29 @@
+{% extends 'layout.html' %}
+
+{% block title%}
+    Users List
+{% endblock %}
+
+{% block content %}
+    <section>
+    <h1>Users List</h1>
+
+    {%for user in users%}
+        <article class = "user">
+            <h2>
+                <a href="{% url 'users:page' user.slug %}">
+                {{ user.title }}
+                </a>
+            </h2>
+            <p>{{ user.date }}</p>
+            <p>{{ user.body }}</p>
+            <h1>Users List</h1>
+        </article>
+        {% empty %}
+    <p>No users found.</p>
+    {% endfor%}
+    </section>
+    <p>
+                <a href="{% url 'users:register' %}">Register a new user</a>
+            </p>
+{% endblock %}

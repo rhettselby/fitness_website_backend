@@ -1,0 +1,28 @@
+
+{% extends 'layout.html' %}
+
+{% block title%}
+    New Workout
+{% endblock %}
+
+{% block content %}
+    <section>
+        {% if type == 'Gym' %}
+            <h1> Gym</h1>
+            <form class = "form-with-validation" action = "{% url 'fitness:add_gym' %}" method = "post" enctype = "multipart/form-data">
+        {% else %}
+            <h1> Cardio</h1>
+            <form class = "form-with-validation" action = "{% url 'fitness:add_cardio' %}" method = "post" enctype = "multipart/form-data">
+        {% endif %}
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class = "form-submit"> Add Workout</button>
+        </form>
+    </section>
+{% endblock %}
+
+
+
+
+
+

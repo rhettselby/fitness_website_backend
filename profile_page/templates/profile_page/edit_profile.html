@@ -1,0 +1,23 @@
+
+{% extends 'layout.html' %}
+
+{% block title%}
+    Update Profile
+{% endblock %}
+
+{% block content %}
+    <section>
+        <h1> Update Profile</h1>
+        <form class = "form-with-validation" action = "{% url 'profile_page:edit_profile' %}" method = "post" enctype = "multipart/form-data">
+            {% csrf_token %}
+            {{ form }}
+            <button class = "form-submit"> Submit Changes</button>
+        </form>
+    </section>
+{% endblock %}
+
+
+
+
+
+

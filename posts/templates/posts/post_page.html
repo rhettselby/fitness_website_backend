@@ -1,0 +1,28 @@
+
+{% extends 'layout.html' %}
+
+{% block title%}
+    {{posts.title}}
+{% endblock %}
+
+{% block content %}
+    <section>
+        {% if posts.banner %}
+        <img 
+        class = "banner"
+        src="{{ posts.banner.url }}"
+        alt = "{{ posts.title }}"
+        />
+        {% endif %}
+        <h1>{{posts.title}}</h1>
+        <p><strong>Date:</strong> {{posts.date}}</p>
+        <p><strong>Content:</strong></p>
+        <p>{{posts.body}}</p>
+    </section>
+{% endblock %}
+
+
+
+
+
+

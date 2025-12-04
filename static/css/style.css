@@ -1,0 +1,183 @@
+* {
+    margin:0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body{
+    min-height: 100vh;
+    display: flex;
+    place-content: center;
+    font-size: 3rem;
+    background-color: black;
+    color: whitesmoke;
+    flex-flow: column;
+
+}
+
+h1, p { 
+    font-size: 2.5rem;
+    text-align: center;
+}
+
+a {
+    text-decoration: none;
+    color: #81dbb8;
+}
+
+a:hover {
+    opacity: .85;
+}
+
+nav {padding: 1rem;
+background-color: #44B78B;
+color: white;
+font-size: 2.5rem;
+}
+
+main {
+    flex-grow: 1;
+    display: grid;
+    place-content: center;
+}
+
+.banner {
+    display:block;
+    width: 100%;
+    max-width: 800px;
+}
+
+/* inputs & button bigger */
+.form-with-validation input[type="text"],
+.form-with-validation input[type="password"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.7rem 0.9rem;
+  font-size: 1rem;           /* bigger field text */
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.form-with-validation .form-submit {
+  padding: 0.6rem 1rem;
+  font-size: 1rem;           /* bigger button text */
+  border-radius: 8px;
+}
+
+/* shrink/help text from UserCreationForm */
+.form-with-validation .helptext,
+.form-with-validation ul.helptext,
+.form-with-validation .helptext li {
+  font-size: 0.85rem;        /* smaller help text */
+  line-height: 1.2;
+  color: #666;
+  margin: 0.25rem 0 0 0;
+  padding: 0;
+}
+
+/* labels, if needed */
+.form-with-validation label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.form-with-validation input[type="number"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.7rem 0.9rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.workout-details {
+  max-width: 700px;
+  margin: 2rem auto;
+  background: #fdfdfd;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.workout-card {
+  background: #fafafa;
+  padding: 1rem 1.5rem;
+  border-left: 5px solid #2196f3;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+}
+
+.comments-section {
+  margin-top: 2rem;
+}
+
+.comments-list {
+  list-style: none;
+  padding: 0;
+}
+
+.comment {
+  background: #f5f5f5;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.comment-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.comment-text {
+  margin-top: 0.5rem;
+  font-size: 1rem;
+  color: #222;
+}
+
+.add-comment {
+  margin-top: 2rem;
+}
+
+.btn-submit {
+  background: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1.2rem;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-submit:hover {
+  background: #1976d2;
+}
+
+.back-link {
+  display: inline-block;
+  margin-top: 1rem;
+  text-decoration: none;
+  color: #2196f3;
+}
+
+.comments-container {
+  height: 250px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  background: #f9f9f9;     /* light gray background */
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+}
+
+.comment {
+  border-bottom: 1px solid #ddd;
+  padding: 8px 0;
+  color: #222;              /* dark text color for visibility */
+}
+
+.comment:last-child {
+  border-bottom: none;
+}
+

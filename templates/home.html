@@ -1,0 +1,34 @@
+{% extends 'layout.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+  <h1>Welcome{% if request.user.is_authenticated %}, {{ request.user.username }}{% endif %} 👋</h1>
+
+  {% if request.user.is_authenticated %}
+    <p>
+      You've logged
+      <strong>{{ user_weekly_count|default:"0" }}</strong>
+      workout{{ user_weekly_count|default:0|pluralize }}
+      so far this week
+      ({{ week_start|date:"M d" }} → {{ week_end|date:"M d" }}).
+    </p>
+
+    <p>
+      View this week's
+      <a href="{% url 'leaderboard' %}">leaderboard</a>
+      and see how you stack up.
+    </p>
+  {% else %}
+    <p>
+      <a href="/users/login/">Log in</a> to start tracking workouts and show up on the leaderboard.
+    </p>
+  {% endif %}
+
+  <hr>
+
+  <p>
+    Learn more about the project on the
+    <a href="{% url 'about' %}">About</a> page.
+  </p>
+{% endblock %}

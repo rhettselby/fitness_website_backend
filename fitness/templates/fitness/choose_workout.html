@@ -1,0 +1,19 @@
+
+{% extends 'layout.html' %}
+
+{% block title%}
+    Choose Workout
+{% endblock %}
+
+{% block content %}
+    <section>
+        <a href="{% url 'fitness:add_gym' %}" >💪 Gym</a>
+        <a href="{% url 'fitness:add_cardio' %}" >🚴 Cardio</a>
+    </section>
+{% endblock %}
+
+
+
+
+
+

@@ -1,0 +1,39 @@
+{% extends 'layout.html' %}
+
+{% block title%}
+    Profile Page
+{% endblock %}
+
+{% block content %}
+    <section>
+    {% if user.profile %}
+            <p><strong>Birthday:</strong> {{ user.profile.birthday }}</p>
+            <p><strong>Hometown:</strong> {{ user.profile.location }}</p>
+            {% if user.profile.bio %}
+                <p><strong>Bio:</strong> {{ user.profile.bio }}</p>
+            {% endif %}
+        {% else %}
+            <p>No profile information available.</p>
+        {% endif %}
+      
+      <a href = "{% url 'profile_page:edit_profile' %}" class = button >Edit Profile<a/>
+    <p> Your Workouts:</p>
+    {% if workouts %}
+  <ul>
+    {% for w in workouts %} <!-- for each workout in users's workout list that we passed from view-->
+      <li>
+        <strong>{{ w.date }}</strong> — <!-- <strong> will bold the date-->
+        {{ w.activity }}
+        {% if w.duration %} • {{ w.duration }} min{% endif %} <!-- if workout has a duration, show a dot, workout duration, "min"-->
+        <em>({{ w.model_name }})</em><!-- This will print the Class name (Cardio or Gym)-->
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>No workouts yet.</p>
+{% endif %}
+
+    </section>
+    <p>
+            </p>
+{% endblock %}

@@ -1,0 +1,51 @@
+
+{% extends 'layout.html' %}
+
+{% block title%}
+    View Comments
+{% endblock %}
+
+{% block content %}
+    <section>
+    <h1>Workout Details</h1>
+        <p>{{workout_type|title}} | {{workout.activity}} | 
+             {{workout.date}} </p>
+
+    <div class="comments-container">
+    {% if comments %}
+        {%for comment in comments%}
+            <div class="comment">
+            <p>{{comment.user.title}} </p>
+            <p>{{comment.text}} </p>
+            <p>{{comment.created_at}} </p> 
+            <p>{{comment.Like}}</p>
+            <form method="post"
+                action="{% url 'fitness:toggle_like' workout_type workout.id %}"
+                style="display:inline;">
+                {% csrf_token %}
+                <button type="submit">
+                    {% if user_liked %}💔 Unlike{% else %}❤️ Like{% endif %}
+                    ({{ like_count }})
+                </button>
+            </form>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No comments yet, you can write the first!</p>
+    {% endif %}
+    </div>
+
+     <h1> Add Comment</h1>
+     <form class = "form-with-validation" action = "{% url 'fitness:add_comment' workout.workout_type workout.id %}" method = "post" enctype = "multipart/form-data">
+     {% csrf_token %}
+     {{ form.as_p }} <!--this is what renders my form (allows for input)-->
+     <button type = "submit" style=  "font-size: 10 rem;" >💬 Post Comment</button>
+     </form>
+    </section>
+{% endblock %}
+
+
+
+
+
+

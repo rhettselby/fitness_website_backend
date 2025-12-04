@@ -1,0 +1,38 @@
+
+{% extends 'layout.html' %}
+
+{% block title%}
+    Workout Log
+{% endblock %}
+
+{% block content %}
+    <section>
+    <h1>Workout Log</h1>
+
+    {%for workout in workouts%}
+        <article class = "post">
+            <h2>
+                <a href="{% url 'fitness:workout_log'%}">
+                {{ workout.activity }}
+                </a>
+            </h2>
+            <p>{{ workout.date }}</p>
+            {% if workout.duration %}
+                <p>{{ workout.duration }}</p>
+            {% endif %}
+
+            <a href="{% url 'fitness:add_comment' workout.workout_type workout.id %}">View Comments</a>
+           
+        </article>
+        {% empty %}
+                <p>No workouts yet — <a href="{% url 'fitness:workout_log' %}"></a>?</p>
+    {% endfor%}
+     <a href="{% url 'fitness:add' %}" >➕ Add Workout</a>
+    </section>
+{% endblock %}
+
+
+
+
+
+

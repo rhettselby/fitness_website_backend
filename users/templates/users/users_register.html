@@ -1,0 +1,26 @@
+{% extends 'layout.html' %}
+
+{%block title%}
+    Register User
+{%endblock%}
+
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/forms.css' %}">
+
+{% block content %}
+    <section>
+        <h1>Register User</h1>
+        <p><strong>Date:</strong> {{users.date}}</p>
+        <p><strong>Content:</strong></p>
+        <form class = "form-with-validation" action = "/users/register/" method = "post">
+            {% csrf_token %}
+            {% if form.errors %}
+            <div class="errors">
+                {{ form.errors }}
+            </div>
+            {% endif %}
+            {{ form }}
+            <button class = "form-submit">Submit</button>
+        </form>
+    </section>
+{% endblock %}

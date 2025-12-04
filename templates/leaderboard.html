@@ -1,0 +1,28 @@
+{% extends 'layout.html' %}
+
+{% block title %}Leaderboard{% endblock %}
+
+{% block content %}
+  <h1>Weekly Leaderboard 🏆</h1>
+  <p>Week of {{ week_start|date:"M d, Y" }} → {{ week_end|date:"M d, Y" }}</p>
+
+  <p>Your total this week: {{ current_user_count }}</p>
+
+  {% if leaderboard and leaderboard|length > 0 %}
+    <ol>
+      {% for row in leaderboard %}
+        <li>
+          {{ row.user.username }} —
+          {{ row.count }} workout{{ row.count|pluralize }}
+          {% if row.user == request.user %}
+            (you)
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p>No workouts logged this week yet.</p>
+  {% endif %}
+
+  <p><a href="{% url 'home' %}">Back to home</a></p>
+{% endblock %}
