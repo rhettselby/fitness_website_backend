@@ -87,13 +87,17 @@ BASE_DIR=Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
-
+from dotenv import load_dotenv
+load_dotenv()
 import dj_database_url
+
+IS_RAILWAY = "RAILWAY_ENVIRONMENT" in os.environ
+
 DATABASES = {
     "default": dj_database_url.parse(
         os.environ.get("DATABASE_URL"),
         conn_max_age=600,
-        ssl_require=True,
+        ssl_require=IS_RAILWAY,
     )
 }
 
