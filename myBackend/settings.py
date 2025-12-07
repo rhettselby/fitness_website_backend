@@ -93,6 +93,12 @@ import dj_database_url
 
 IS_RAILWAY = "RAILWAY_ENVIRONMENT" in os.environ
 
+raw_url = os.environ.get("DATABASE_URL")
+
+if raw_url and "sslmode" in raw_url:
+    raw_url = raw_url.split("?")[0]
+
+
 DATABASES = {
     "default": dj_database_url.parse(
         os.environ.get("DATABASE_URL"),
