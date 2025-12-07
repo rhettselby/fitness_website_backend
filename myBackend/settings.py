@@ -86,26 +86,23 @@ import dj_database_url
 BASE_DIR=Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-
-from dotenv import load_dotenv
-load_dotenv()
+import os
 import dj_database_url
 
-IS_RAILWAY = "RAILWAY_ENVIRONMENT" in os.environ
-
-raw_url = os.environ.get("DATABASE_URL")
-
-if raw_url and "sslmode" in raw_url:
-    raw_url = raw_url.split("?")[0]
-
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
 DATABASES = {
     "default": dj_database_url.parse(
-        os.environ.get("DATABASE_URL"),
+        DATABASE_URL,
         conn_max_age=600,
         ssl_require=False,
     )
 }
+
+# Force psycopg2 to NEVER attempt SSL
+DATABASES["default"]["OPTIONS"] = {"sslmode": "disable"}
+
+print("DJANGO DATABASE CONFIG:", DATABASES["default"])
 
 
 # Password validation
