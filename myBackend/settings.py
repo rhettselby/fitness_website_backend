@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'fitness',
     'profile_page',
     'whitenoise.runserver_nostatic',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -182,15 +183,15 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    #frontend domain
-    'https://fitness-website.vercel.app',
-   ]
+    'https://fitness-website-26msphlty-rhettselbys-projects.vercel.app',
+    'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
+]
 
 # Trusted origins for CSRF
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    #live railway backend
-    'https://fitness_website_backend.up.railway.app', # <-- Required for the backend itself
-    'https://fitness-website.vercel.app', # <-- Optional, but good practice
+    'https://fitness-website-backend.up.railway.app',  # Note: use dash not underscore
+    'https://fitness-website-26msphlty-rhettselbys-projects.vercel.app',
+    'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
 ]
