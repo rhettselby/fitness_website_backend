@@ -181,7 +181,7 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'https://fitness-website-26msphlty-rhettselbys-projects.vercel.app',
-    'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
+    'https://fitness-website-git-main-rhettselbys-projects.vercel.app/',
 ]
 
 # Trusted origins for CSRF
@@ -190,7 +190,7 @@ CSRF_TRUSTED_ORIGINS = [
     'http://127.0.0.1:5173',
     'https://fitness-website-backend.up.railway.app',  # Note: use dash not underscore
     'https://fitness-website-26msphlty-rhettselbys-projects.vercel.app',
-    'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
+    'https://fitness-website-git-main-rhettselbys-projects.vercel.app/',
 ]
 
 SESSION_COOKIE_SAMESITE = "None"
