@@ -182,15 +182,15 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    # ADD YOUR LIVE VERCEL FRONTEND DOMAIN HERE
-    'https://your-frontend-name.vercel.app', # <-- Replace with your actual Vercel domain
-]
+    #frontend domain
+    'https://fitness-website.vercel.app',
+   ]
 
 # Trusted origins for CSRF
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    # ADD YOUR LIVE RAILWAY BACKEND DOMAIN HERE
-    'https://your-backend-name.up.railway.app', # <-- Required for the backend itself
-    'https://your-frontend-name.vercel.app', # <-- Optional, but good practice
+    #live railway backend
+    'https://fitness_website_backend.up.railway.app', # <-- Required for the backend itself
+    'https://fitness-website.vercel.app', # <-- Optional, but good practice
 ]
