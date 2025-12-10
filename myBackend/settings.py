@@ -43,10 +43,12 @@ INSTALLED_APPS = [
     'users',
     'fitness',
     'profile_page',
+    'whitenoise.runserver_nostatic',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -77,33 +79,35 @@ WSGI_APPLICATION = 'myBackend.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# Database
+# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-import os
-from pathlib import Path
-from dotenv import load_dotenv
 import dj_database_url
-
-BASE_DIR=Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
-
 import os
-import dj_database_url
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
+# Use dj-database-url's config() which automatically reads separate
+# environment variables (like POSTGRES_USER, POSTGRES_HOST) from Railway
+# to construct the correct internal connection URL with the current password.
 DATABASES = {
-    "default": dj_database_url.parse(
-        DATABASE_URL,
+    "default": dj_database_url.config(
         conn_max_age=600,
-        ssl_require=False,
+        conn_health_checks=True,
     )
 }
 
-# Force psycopg2 to NEVER attempt SSL
-DATABASES["default"]["OPTIONS"] = {"sslmode": "disable"}
+# If running on Railway, explicitly force the use of the internal host for stability
+if 'RAILWAY_ENVIRONMENT_NAME' in os.environ:
+    if 'default' in DATABASES and DATABASES['default'].get('HOST') == 'containers-us-west-131.railway.app': # Example of a public host
+        # The variables from the service are usually sufficient, but this ensures
+        # that it uses the stable internal host.
+        DATABASES['default']['HOST'] = os.environ.get('POSTGRES_HOST', DATABASES['default']['HOST'])
 
-print("DJANGO DATABASE CONFIG:", DATABASES["default"])
+# Force psycopg2 to NOT attempt SSL if connecting internally
+DATABASES["default"]["OPTIONS"] = {"sslmode": "disable"} 
 
+print("DJANGO DATABASE CONFIG HOST:", DATABASES["default"].get("HOST", "Not found"))
+
+# --- END DATABASE CONFIG ---
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -140,6 +144,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+STATIC_ROOT = BASE_DIR / 'staticfiles' # ADD THIS LINE FOR PRODUCTION
 
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
