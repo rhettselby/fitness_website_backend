@@ -97,32 +97,29 @@ import dj_database_url
 import os
 
 if 'RAILWAY_ENVIRONMENT_NAME' in os.environ:
-    # Get individual variables from Railway
-    pg_user = os.environ.get('PGUSER')
-    pg_password = os.environ.get('PGPASSWORD')
-    pg_host = os.environ.get('PGHOST')
-    pg_port = os.environ.get('PGPORT', '5432')
-    pg_database = os.environ.get('PGDATABASE')
+    # Get the DATABASE_URL from Railway
+    database_url = os.environ.get('DATABASE_URL', '')
     
-    # Build connection string with sslmode disabled
-    DATABASE_URL = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}?sslmode=disable"
-    
+    # Parse it
     DATABASES = {
-        "default": dj_database_url.parse(
-            DATABASE_URL,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
+        "default": dj_database_url.parse(database_url)
     }
     
+    # CRITICAL: Force disable SSL after parsing
+    DATABASES["default"]["OPTIONS"] = {
+        "sslmode": "disable",
+        "connect_timeout": 10,
+    }
+    
+    print(f"DATABASE_URL: {database_url[:50]}...")  # Print first 50 chars
     print(f"DJANGO DATABASE CONFIG HOST: {DATABASES['default'].get('HOST', 'Not found')}")
     print(f"DJANGO DATABASE CONFIG NAME: {DATABASES['default'].get('NAME', 'Not found')}")
+    print(f"DJANGO SSL MODE: {DATABASES['default']['OPTIONS']['sslmode']}")
 else:
     # Local development
     DATABASES = {
         'default': dj_database_url.config(
             default='sqlite:///db.sqlite3',
-            conn_max_age=600,
         )
     }
     print("Using local database configuration")
