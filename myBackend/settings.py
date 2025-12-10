@@ -25,10 +25,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-)#zswis1j=j!pl$^)mp73llo2wf*e7vij_(egc3mw%m&!0a*k_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Set DEBUG based on an environment variable. Default to False in production.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True' # Set DJANGO_DEBUG=True in local .env
 
-ALLOWED_HOSTS = []
+# Read trusted hosts from environment variable. 
+# This is required for Django to accept traffic from its public URL.
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 
+# Add the Railway domain for production traffic
+ALLOWED_HOSTS.append('.up.railway.app') 
+
+# If you have custom domains, add them here:
+# ALLOWED_HOSTS.append('yourcustomdomain.com')
 
 # Application definition
 
@@ -171,11 +179,15 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    # ADD YOUR LIVE VERCEL FRONTEND DOMAIN HERE
+    'https://your-frontend-name.vercel.app', # <-- Replace with your actual Vercel domain
 ]
 
 # Trusted origins for CSRF
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    # ADD YOUR LIVE RAILWAY BACKEND DOMAIN HERE
+    'https://your-backend-name.up.railway.app', # <-- Required for the backend itself
+    'https://your-frontend-name.vercel.app', # <-- Optional, but good practice
 ]
-
