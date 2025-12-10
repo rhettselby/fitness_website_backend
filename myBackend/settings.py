@@ -90,35 +90,31 @@ WSGI_APPLICATION = 'myBackend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Database Configuration for Railway
+# Replace your existing database section with this:
+
+# Database Configuration for Railway
+# Replace your existing database section with this:
+
 import dj_database_url
 import os
 
-# Use dj-database-url's config() which automatically reads separate
-# environment variables (like POSTGRES_USER, POSTGRES_HOST) from Railway
-# to construct the correct internal connection URL with the current password.
+# Railway now provides DATABASE_URL, so we can use it directly
 DATABASES = {
     "default": dj_database_url.config(
+        default='sqlite:///db.sqlite3',  # Fallback for local development
         conn_max_age=600,
         conn_health_checks=True,
     )
 }
 
-# If running on Railway, explicitly force the use of the internal host for stability
+# If on Railway, disable SSL for internal connections
 if 'RAILWAY_ENVIRONMENT_NAME' in os.environ:
-    if 'default' in DATABASES and DATABASES['default'].get('HOST') == 'containers-us-west-131.railway.app': # Example of a public host
-        # The variables from the service are usually sufficient, but this ensures
-        # that it uses the stable internal host.
-        DATABASES['default']['HOST'] = os.environ.get('POSTGRES_HOST', DATABASES['default']['HOST'])
+    DATABASES["default"]["OPTIONS"] = {"sslmode": "disable"}
+    
+print(f"DJANGO DATABASE CONFIG HOST: {DATABASES['default'].get('HOST', 'Not found')}")
+print(f"DJANGO DATABASE CONFIG NAME: {DATABASES['default'].get('NAME', 'Not found')}")
 
-# Force psycopg2 to NOT attempt SSL if connecting internally
-DATABASES["default"]["OPTIONS"] = {"sslmode": "disable"} 
-
-print("DJANGO DATABASE CONFIG HOST:", DATABASES["default"].get("HOST", "Not found"))
-
-# --- END DATABASE CONFIG ---
-
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
