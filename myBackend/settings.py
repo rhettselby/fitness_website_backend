@@ -180,9 +180,9 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    'https://fitness-website-gilt.vercel.app/',
-    'https://fitness-website-git-main-rhettselbys-projects.vercel.app/',
-    'https://fitness-website-n5cwg5gb8-rhettselbys-projects.vercel.app/',
+    'https://fitness-website-gilt.vercel.app',
+    'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
+    'https://fitness-website-n5cwg5gb8-rhettselbys-projects.vercel.app',
 ]
    
 
