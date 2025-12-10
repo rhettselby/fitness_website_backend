@@ -108,9 +108,6 @@ DATABASES = {
     )
 }
 
-# If on Railway, disable SSL for internal connections
-if 'RAILWAY_ENVIRONMENT_NAME' in os.environ:
-    DATABASES["default"]["OPTIONS"] = {"sslmode": "disable"}
     
 print(f"DJANGO DATABASE CONFIG HOST: {DATABASES['default'].get('HOST', 'Not found')}")
 print(f"DJANGO DATABASE CONFIG NAME: {DATABASES['default'].get('NAME', 'Not found')}")
