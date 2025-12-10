@@ -28,16 +28,12 @@ SECRET_KEY = 'django-insecure-)#zswis1j=j!pl$^)mp73llo2wf*e7vij_(egc3mw%m&!0a*k_
 # Set DEBUG based on an environment variable. Default to False in production.
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True' # Set DJANGO_DEBUG=True in local .env
 
-# Read trusted hosts from environment variable. 
-# This is required for Django to accept traffic from its public URL.
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
-
-# Add the Railway domain for production traffic
-ALLOWED_HOSTS.append('.up.railway.app') 
-
-# If you have custom domains, add them here:
-# ALLOWED_HOSTS.append('yourcustomdomain.com')
-
+ALLOWED_HOSTS = [
+    ".up.railway.app",
+    "fitness-website-backend.up.railway.app",
+    "localhost",
+    "127.0.0.1"
+]
 # Application definition
 
 INSTALLED_APPS = [
@@ -56,14 +52,15 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",   # MUST be first
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = 'myBackend.urls'
