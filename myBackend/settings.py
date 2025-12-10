@@ -93,26 +93,39 @@ WSGI_APPLICATION = 'myBackend.wsgi.application'
 # Database Configuration for Railway
 # Replace your existing database section with this:
 
-# Database Configuration for Railway
-# Replace your existing database section with this:
-
 import dj_database_url
 import os
 
-# Railway now provides DATABASE_URL, so we can use it directly
-DATABASES = {
-    "default": dj_database_url.config(
-        default='sqlite:///db.sqlite3',  # Fallback for local development
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
-
+if 'RAILWAY_ENVIRONMENT_NAME' in os.environ:
+    # Get individual variables from Railway
+    pg_user = os.environ.get('PGUSER')
+    pg_password = os.environ.get('PGPASSWORD')
+    pg_host = os.environ.get('PGHOST')
+    pg_port = os.environ.get('PGPORT', '5432')
+    pg_database = os.environ.get('PGDATABASE')
     
-print(f"DJANGO DATABASE CONFIG HOST: {DATABASES['default'].get('HOST', 'Not found')}")
-print(f"DJANGO DATABASE CONFIG NAME: {DATABASES['default'].get('NAME', 'Not found')}")
-
-
+    # Build connection string with sslmode disabled
+    DATABASE_URL = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}?sslmode=disable"
+    
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+    
+    print(f"DJANGO DATABASE CONFIG HOST: {DATABASES['default'].get('HOST', 'Not found')}")
+    print(f"DJANGO DATABASE CONFIG NAME: {DATABASES['default'].get('NAME', 'Not found')}")
+else:
+    # Local development
+    DATABASES = {
+        'default': dj_database_url.config(
+            default='sqlite:///db.sqlite3',
+            conn_max_age=600,
+        )
+    }
+    print("Using local database configuration")
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
