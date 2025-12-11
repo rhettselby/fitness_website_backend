@@ -196,6 +196,10 @@ CSRF_TRUSTED_ORIGINS = [
     "https://fitness-website-n5cwg5gb8-rhettselbys-projects.vercel.app",
 ]
 
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    "^https://fitness-website.*\.vercel\.app$",
+]
 SESSION_COOKIE_SAMESITE = "None"
 SESSION_COOKIE_SECURE = True
 
