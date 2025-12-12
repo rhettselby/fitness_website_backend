@@ -200,7 +200,7 @@ CSRF_TRUSTED_ORIGINS = [
 
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    "^https://fitness-website.*\.vercel\.app$",
+    r"^https://fitness-website.*\.vercel\.app$",
 ]
 SESSION_COOKIE_SAMESITE = "None"
 SESSION_COOKIE_SECURE = True
