@@ -167,45 +167,63 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Session configuration for cross-origin requests
-SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'  # Works with same-origin requests (via proxy)
-SESSION_COOKIE_NAME = 'sessionid'
-SESSION_COOKIE_AGE = 1209600  # 2 weeks
-SESSION_COOKIE_DOMAIN = None  # Don't restrict domain for localhost
 
-# CORS settings - Allow cookies to be sent
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://fitness-website-gilt.vercel.app',
+    'https://fitness-website-git.vercel.app',
+    'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
+    'https://fitness-website-n5cwg5gb8-rhettselbys-projects.vercel.app',
+]
+
+# Allow credentials (cookies, authorization headers, etc.)
 CORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOW_ALL_ORIGINS = True  # #Debug to allow all origins
-#CORS_ALLOWED_ORIGINS = [
-   # 'http://localhost:5173',
-   # 'http://127.0.0.1:5173',
-   # 'https://fitness-website-gilt.vercel.app',
-   # "https://fitness-website-git.vercel.app",
-   # 'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
-   # 'https://fitness-website-n5cwg5gb8-rhettselbys-projects.vercel.app',
-#]
-   
+# Allowed methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Allowed headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # Trusted origins for CSRF
-#CSRF_TRUSTED_ORIGINS = [
-    #'http://localhost:5173',
-    #'http://127.0.0.1:5173',
-    #'https://fitness-website-backend.up.railway.app', 
-    #"https://fitness-website-gilt.vercel.app",
-   # "https://fitness-website-git.vercel.app",
-   # "https://fitness-website-git-main-rhettselbys-projects.vercel.app",
-   # "https://fitness-website-n5cwg5gb8-rhettselbys-projects.vercel.app",
-#]
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://fitness-website-backend.up.railway.app', 
+    'https://fitness-website-gilt.vercel.app',
+    'https://fitness-website-git.vercel.app',
+    'https://fitness-website-git-main-rhettselbys-projects.vercel.app',
+    'https://fitness-website-n5cwg5gb8-rhettselbys-projects.vercel.app',
+]
 
+# Session configuration for cross-origin requests
+SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-origin
+SESSION_COOKIE_SECURE = True      # Required when SameSite=None
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_NAME = 'sessionid'
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
+SESSION_COOKIE_DOMAIN = None
 
-#CORS_ALLOWED_ORIGIN_REGEXES = [
-    #r"^https://fitness-website.*\.vercel\.app$",
-#]
-SESSION_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SECURE = True
-
-CSRF_COOKIE_SAMESITE = "None"
-CSRF_COOKIE_SECURE = True
+# CSRF configuration for cross-origin requests
+CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-origin
+CSRF_COOKIE_SECURE = True      # Required when SameSite=None
