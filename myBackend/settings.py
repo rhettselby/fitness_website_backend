@@ -170,20 +170,41 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 
+import re
 
 # Allow credentials (cookies, authorization headers, etc.)
 CORS_ALLOW_CREDENTIALS = True
 
+# Specific origins
 CORS_ALLOWED_ORIGINS = [
-    "https://fitness-website-gilt.vercel.app",
-
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://fitness-website-gilt.vercel.app',
 ]
 
-CORS_TRUSTED_ORIGINS = [
-    "https://fitness-website-gilt.vercel.app",
+# Use regex to match all Vercel preview deployments
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://fitness-website.*\.vercel\.app$",
 ]
 
-# Allowed methods
+# CSRF Trusted Origins
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://fitnesswebsitebackend-production.up.railway.app',
+    'https://fitness-website-gilt.vercel.app',
+    'https://*.vercel.app',  # Wildcard for all Vercel domains
+]
+
+# Update ALLOWED_HOSTS too
+ALLOWED_HOSTS = [
+    ".up.railway.app",
+    "fitnesswebsitebackend-production.up.railway.app",  # Update to correct domain
+    "localhost",
+    "127.0.0.1"
+]
+
+# Keep the rest of your CORS settings
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -193,7 +214,6 @@ CORS_ALLOW_METHODS = [
     'PUT',
 ]
 
-# Allowed headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -206,15 +226,15 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-
 # Session configuration for cross-origin requests
-SESSION_COOKIE_SAMESITE = 'None'  # Required for cross-origin
-SESSION_COOKIE_SECURE = True      # Required when SameSite=None
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_NAME = 'sessionid'
 SESSION_COOKIE_AGE = 1209600  # 2 weeks
 SESSION_COOKIE_DOMAIN = None
 
 # CSRF configuration for cross-origin requests
-CSRF_COOKIE_SAMESITE = 'None'  # Required for cross-origin
-CSRF_COOKIE_SECURE = True      # Required when SameSite=None
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+
