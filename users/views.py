@@ -7,6 +7,9 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from django.contrib.auth.models import User
 
+from django.http import JsonResponse
+from django.middleware.csrf import get_token
+
 # Create your views here.
 
 def users_list(request):
@@ -246,6 +249,9 @@ def logout_view_api(request):
     }, status=405)
     return response
 
+
+def csrf(request):
+    return JsonResponse({"csrfToken": get_token(request)})
 
 
 #def register_view(request):
