@@ -94,33 +94,16 @@ WSGI_APPLICATION = 'myBackend.wsgi.application'
 import dj_database_url
 import os
 
-if 'RAILWAY_ENVIRONMENT_NAME' in os.environ:
-    # Get the DATABASE_URL from Railway
-    database_url = os.environ.get('DATABASE_URL', '')
-    
-    # Parse it
-    DATABASES = {
-        "default": dj_database_url.parse(database_url)
-    }
-    
-    # CRITICAL: Force disable SSL after parsing
-    DATABASES["default"]["OPTIONS"] = {
-        "sslmode": "disable",
-        "connect_timeout": 10,
-    }
-    
-    print(f"DATABASE_URL: {database_url[:50]}...")  # Print first 50 chars
-    print(f"DJANGO DATABASE CONFIG HOST: {DATABASES['default'].get('HOST', 'Not found')}")
-    print(f"DJANGO DATABASE CONFIG NAME: {DATABASES['default'].get('NAME', 'Not found')}")
-    print(f"DJANGO SSL MODE: {DATABASES['default']['OPTIONS']['sslmode']}")
-else:
-    # Local development
-    DATABASES = {
-        'default': dj_database_url.config(
-            default='sqlite:///db.sqlite3',
-        )
-    }
-    print("Using local database configuration")
+import dj_database_url
+
+DATABASES = {
+    "default": dj_database_url.parse(
+        os.environ.get("DATABASE_URL"),
+        conn_max_age=0,     # REQUIRED for Supabase pgBouncer
+        ssl_require=True,   # REQUIRED for Supabase
+    )
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
