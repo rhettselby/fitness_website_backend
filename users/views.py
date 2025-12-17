@@ -92,18 +92,12 @@ def login_view_api(request):
     # Handle CORS preflight requests
     if request.method == 'OPTIONS':
         response = JsonResponse({})
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
     
     if request.method == "POST":
         try:
             if not request.body:
                 response = JsonResponse({"success": False, "error": "Empty request body"}, status=400)
-                response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-                response['Access-Control-Allow-Credentials'] = 'true'
                 return response
             
             data = json.loads(request.body)
@@ -112,8 +106,6 @@ def login_view_api(request):
             
             if not username or not password:
                 response = JsonResponse({"success": False, "error": "Missing username or password"}, status=400)
-                response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-                response['Access-Control-Allow-Credentials'] = 'true'
                 return response
             
             # Authenticate user
@@ -130,31 +122,21 @@ def login_view_api(request):
                     },
                     "message": "User logged-in successfully"
                 }, status=200)
-                response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-                response['Access-Control-Allow-Credentials'] = 'true'
                 return response
             else:
                 response = JsonResponse({"success": False, "error": "Invalid username or password"}, status=400)
-                response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-                response['Access-Control-Allow-Credentials'] = 'true'
                 return response
         except json.JSONDecodeError:
             response = JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
-            response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-            response['Access-Control-Allow-Credentials'] = 'true'
             return response
         except Exception as e:
             response = JsonResponse({"success": False, "error": str(e)}, status=500)
-            response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-            response['Access-Control-Allow-Credentials'] = 'true'
             return response
     
     response = JsonResponse({
         "success": False,
         "message": "Only POST method allowed",
     }, status=405)
-    response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-    response['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 
@@ -165,25 +147,17 @@ def register_api(request):
     # Handle CORS preflight requests
     if request.method == 'OPTIONS':
         response = JsonResponse({})
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
     
     if request.method == "POST":
         try:
             if not request.body:
                 response = JsonResponse({"success": False, "error": "Empty request body"}, status=400)
-                response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-                response['Access-Control-Allow-Credentials'] = 'true'
                 return response
             
             data = json.loads(request.body)
         except json.JSONDecodeError:
             response = JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
-            response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-            response['Access-Control-Allow-Credentials'] = 'true'
             return response
         
         username = data.get("username")
@@ -192,14 +166,10 @@ def register_api(request):
 
         if not username or not password:
             response = JsonResponse({"success": False, "error": "Missing fields"}, status=400)
-            response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-            response['Access-Control-Allow-Credentials'] = 'true'
             return response
 
         if User.objects.filter(username=username).exists():
             response = JsonResponse({"success": False, "error": "Username already taken"}, status=400)
-            response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-            response['Access-Control-Allow-Credentials'] = 'true'
             return response
 
         try:
@@ -210,18 +180,12 @@ def register_api(request):
                 "user": {"id": user.id, "username": user.username},
                 "message": "User registered successfully"
             }, status=201)
-            response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-            response['Access-Control-Allow-Credentials'] = 'true'
             return response
         except Exception as e:
             response = JsonResponse({"success": False, "error": str(e)}, status=500)
-            response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-            response['Access-Control-Allow-Credentials'] = 'true'
             return response
 
     response = JsonResponse({"success": False, "message": "Only POST allowed"}, status=405)
-    response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-    response['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 
@@ -230,10 +194,6 @@ def check_auth_api(request):
     """Check if user is authenticated"""
     if request.method == 'OPTIONS':
         response = JsonResponse({})
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
     
     if request.method == 'GET':
@@ -250,13 +210,9 @@ def check_auth_api(request):
                 "authenticated": False,
                 "user": None
             })
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
     
     response = JsonResponse({"success": False, "message": "Only GET allowed"}, status=405)
-    response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-    response['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 
@@ -274,10 +230,6 @@ def logout_view_api(request):
     # Handle CORS preflight requests
     if request.method == 'OPTIONS':
         response = JsonResponse({})
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
     
     if request.method == "POST":
@@ -286,16 +238,12 @@ def logout_view_api(request):
             "success": True,
             "message": "User logged out successfully"
         }, status=200)
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
 
     response = JsonResponse({
         "success": False,
         "message": "Only POST method allowed"
     }, status=405)
-    response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-    response['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 

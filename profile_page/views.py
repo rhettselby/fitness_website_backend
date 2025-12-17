@@ -27,16 +27,10 @@ def viewpage_api(request):
     # Handle CORS preflight requests
     if request.method == 'OPTIONS':
         response = JsonResponse({})
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
     
     if not request.user.is_authenticated:
         response = JsonResponse({"error": "Authentication required"}, status=401)
-        response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-        response['Access-Control-Allow-Credentials'] = 'true'
         return response
     
     user = request.user
@@ -80,8 +74,6 @@ def viewpage_api(request):
         },
         "profile": profile_data
     })
-    response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
-    response['Access-Control-Allow-Credentials'] = 'true'
     return response
     
 
