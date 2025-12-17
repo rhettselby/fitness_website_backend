@@ -46,7 +46,7 @@ urlpatterns = [
     # API routes only - remove duplicates
     path('api/leaderboard/', views.leaderboard_api, name='leaderboard_api'),
     path('api/posts/', include('posts.urls')),
-    path('api/users/', include('users.urls')),  # This already has /api/ paths inside
+    path('users/', include('users.urls')),  # This already has /api/ paths inside
     path('api/fitness/', include('fitness.urls')),  # This already has /api/ paths inside
     path('api/profile/', include('profile_page.urls')),
 
