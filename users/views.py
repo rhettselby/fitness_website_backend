@@ -10,6 +10,10 @@ from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+
+
 # Create your views here.
 
 def users_list(request):
@@ -74,6 +78,38 @@ def register_api_not_usingJSON(request):
     status=405
     )
 
+    ### JWT Authentication Version
+@csrf_exempt
+def register_api_jwt(request):
+            if request.method == "POST":
+                try:
+                    data = json.loads(request.body)
+                    username = data.get("username")
+                    password = data.get("password")
+                    email = data.get("email", "")
+
+                    if not username or not password:
+                        return JsonResponse({"success": False, "error": "Missing Fields"})
+                    
+                    if user.objects.filter(username=username).exists():
+                        return JsonResponse({"success": False, "error": "Username already exists"})
+
+                    user = User.objects.create_user(username=username, password=password, email = email)
+
+                    refresh = RefreshToken.for_user(user)
+
+                    return JsonResponse({
+                        "success": True,
+                        "user": {"id": user.id, "username": user.username},
+                        "access": str(refresh),
+                        "message": "User Registered Successfully"
+                    }, status = 201)
+                
+                except Exception as e:
+                    return JsonResponse({"success": False, "message": "Only Post Allowed"}, status = 405)
+
+
+
 
 def login_view(request):
     if request.method == "POST":
@@ -90,7 +126,6 @@ def login_view(request):
 
 #####JSON_Version#####
 
-@csrf_exempt
 def login_view_api(request):
     # Handle CORS preflight requests
     if request.method == 'OPTIONS':
@@ -143,7 +178,64 @@ def login_view_api(request):
     return response
 
 
+#### JWT Authentication verion
+@csrf_exempt
+def login_view_api_jwt(request):
+    # Handle CORS preflight requests
+    if request.method == 'OPTIONS':
+        response = JsonResponse({})
+        return response
+    
+    if request.method == "POST":
+        try:
+            if not request.body:
+                response = JsonResponse({"success": False, "error": "Empty request body"}, status=400)
+                return response
+            
+            data = json.loads(request.body)
+            username = data.get("username")
+            password = data.get("password")
+            
+            if not username or not password:
+                response = JsonResponse({"success": False, "error": "Missing username or password"}, status=400)
+                return response
+            
+            # Authenticate user
+            from django.contrib.auth import authenticate
+            user = authenticate(request, username=username, password=password)
+            
+            
+            
+            if user is not None:
 
+                refresh = RefreshToken.for_user(user)
+
+                response = JsonResponse({
+                    "success": True,
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                    },
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "message": "User logged-in successfully",
+                }, status=200)
+                return response
+            else:
+                response = JsonResponse({"success": False, "error": "Invalid username or password"}, status=400)
+                return response
+        except json.JSONDecodeError:
+            response = JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+            return response
+        except Exception as e:
+            response = JsonResponse({"success": False, "error": str(e)}, status=500)
+            return response
+    
+    response = JsonResponse({
+        "success": False,
+        "message": "Only POST method allowed",
+    }, status=405)
+    return response
 
 @csrf_exempt
 def register_api(request):
@@ -217,6 +309,55 @@ def check_auth_api(request):
     
     response = JsonResponse({"success": False, "message": "Only GET allowed"}, status=405)
     return response
+
+
+#### Check_auth JWT Authentication Version
+@csrf_exempt
+def check_auth_api_jwt(request):
+    """Check if user is authenticated"""
+    if request.method == 'OPTIONS':
+        response = JsonResponse({})
+        return response
+    
+    if request.method == 'GET':
+
+        auth_header = request.headers.get('Authorization', '')
+            
+        if not auth_header.startswith('Bearer '):
+            return JsonResponse({
+                "authenticated": False,
+                "user": None
+            })
+        token = auth_header.split(' ')[1]
+
+        try:
+
+            access_token = AccessToken(token)
+            user_id = access_token['user_id']
+
+            try: 
+                user = User.objects.get(id = user_id)
+                return JsonResponse({
+                    "authenticated": True,
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                    }
+                })
+            
+            except User.DoesNotExist:
+                return JsonResponse({
+                    "authenticated": False,
+                    "user": None
+                })
+        except (InvalidToken, TokenError):
+                #Token is Invalid/Expired
+                return JsonResponse({
+                    "authenticated": False,
+                    "user": None
+                })
+
+    return JsonResponse({"success": False, "message": "Only GET Allowed"}, status = 405)
 
 
 def logout_view(request):

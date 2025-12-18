@@ -49,6 +49,9 @@ INSTALLED_APPS = [
     'profile_page',
     'whitenoise.runserver_nostatic',
     'corsheaders',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
@@ -92,17 +95,26 @@ WSGI_APPLICATION = 'myBackend.wsgi.application'
 # Replace your existing database section with this:
 
 import dj_database_url
-import os
 
-import dj_database_url
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-DATABASES = {
-    "default": dj_database_url.parse(
-        os.environ.get("DATABASE_URL"),
-        conn_max_age=0,     # REQUIRED for Supabase pgBouncer
-        ssl_require=True,   # REQUIRED for Supabase
-    )
-}
+if DATABASE_URL:
+    # Production (Railway / Supabase)
+    DATABASES = {
+        "default": dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=0,      # Supabase + pgBouncer
+            ssl_require=True,    # Supabase requires SSL
+        )
+    }
+else:
+    # Local development
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -221,3 +233,29 @@ SESSION_COOKIE_DOMAIN = None
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 
+
+### Additions for implementing JWT Authentication
+
+from datetime import timedelta
+
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Increased from 15
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_COOKIE': 'access_token',  # Cookie name for access token
+    'AUTH_COOKIE_SECURE': True,     # Only send over HTTPS
+    'AUTH_COOKIE_HTTP_ONLY': True,  # Not accessible via JavaScript
+    'AUTH_COOKIE_SAMESITE': 'None', # Allow cross-site
+}
