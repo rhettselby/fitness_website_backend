@@ -91,7 +91,7 @@ def register_api_jwt(request):
                     if not username or not password:
                         return JsonResponse({"success": False, "error": "Missing Fields"})
                     
-                    if user.objects.filter(username=username).exists():
+                    if User.objects.filter(username=username).exists():
                         return JsonResponse({"success": False, "error": "Username already exists"})
 
                     user = User.objects.create_user(username=username, password=password, email = email)
@@ -101,7 +101,8 @@ def register_api_jwt(request):
                     return JsonResponse({
                         "success": True,
                         "user": {"id": user.id, "username": user.username},
-                        "access": str(refresh),
+                        "access": str(refresh.access_token),
+                        "refresh": str(refresh),
                         "message": "User Registered Successfully"
                     }, status = 201)
                 
