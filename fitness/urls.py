@@ -19,4 +19,9 @@ urlpatterns = [
   path('api/', views.workout_log_api, name = "workout_log"),
   path('api/add/gym/', views.add_gym_api, name = "add_gym_api"),
   path('api/add/cardio/', views.add_cardio_api, name = "add_cardio_api"),
+
+  #jwt authentication url's
+
+  path('api/add/gym-jwt/', views.add_gym_api_jwt, name = "add_gym_jwt"),
+  path('api/add/cardio-jwt/', views.add_cardio_api_jwt, name = "add_cardio_jwt"),
 ]
