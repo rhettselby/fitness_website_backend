@@ -7,9 +7,27 @@ from .forms import GymForm, CardioForm, CommentForm
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from django.shortcuts import get_object_or_404 #attemps to get an object, if it cant, then it raises an http 404 instead of server crashing
+from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from django.contrib.auth.models import User
 
-# Create your views here.
 
+### Helper function for JWT Authentication
+def get_user_from_token(request):
+    auth_header = request.headers.get('Authorization', '')
+
+    if not auth_header.startswith('Bearer '):
+        return None
+    
+    token = auth_header.split(' ')[1]
+
+    try:
+        access_token = AccessToken(token)
+        user_id = access_token['user_id']
+        return User.objects.get(id=user_id)
+    except (InvalidToken, TokenError, User.DoesNotExist):
+        return None
 
 @login_required(login_url = "/users/login/")
 def workout_log(request):
@@ -42,7 +60,7 @@ def workout_log_api(request):
     } for w in workout_list
 ]})
 
-
+            
 ##This function can be handled by frontend
 @login_required(login_url = "/users/login/")
 def add_workout(request):
@@ -92,6 +110,45 @@ def add_gym_api(request):
         status = 400
     )
        
+## JWT Authentication Version
+
+@csrf_exempt
+def add_gym_api_jwt(request):
+
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Only Post Allowed"}, status = 405)
+    
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"success": False, "error": "Authentication Required"}, status = 401)
+    
+    form = GymForm(request.POST)
+
+    if form.is_valid():
+        obj = form.save(commit=False)
+        obj.user = user
+        obj.save()
+
+        return JsonResponse({
+            "success": True,
+            "gym": {
+                "id": obj.id,
+                "user": {
+                    "id" : obj.user_id,
+                    "username": obj.user.username,
+                },
+                "activity": obj.activity,
+                "date": obj.date.isoformat(),
+            },
+            "message": "Gym workout added successfully"
+        }, status = 201)
+    
+    return JsonResponse (
+        {
+        "success": False, "errors": form.errors,
+        },
+        status = 400)
+
 
 
 @login_required(login_url = "/users/login/")
@@ -136,6 +193,44 @@ def add_cardio_api(request):
     return JsonResponse(
         {"success": False, "errors": form.errors},
         status = 400
+    )
+
+### JWT Authentication Version
+
+@csrf_exempt
+def add_cardio_api_jwt(request):
+    if request.method != "POST":
+        return JsonResponse ({ "success": False, "error": "Only Post Allowed"}, status = 405)
+
+    #getting user from JWT Token
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
+    
+    form = CardioForm(request.POST)
+    if form.is_valid():
+        obj = form.save(commit=False)
+        obj.user = user
+        obj.save()
+        
+        return JsonResponse({
+            "success": True,
+            "cardio": {
+                "id": obj.id,
+                "user": {
+                    "id": obj.user_id,
+                    "username": obj.user.username,
+                },
+                "activity": obj.activity,
+                "duration": obj.duration,
+                "date": obj.date.isoformat(),
+            },
+            "message": "Cardio workout added successfully"
+        }, status=201)
+    
+    return JsonResponse(
+        {"success": False, "errors": form.errors},
+        status=400
     )
 
 
