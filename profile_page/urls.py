@@ -10,6 +10,6 @@ urlpatterns = [
     path('edit_profile/', views.editprofile, name = 'edit_profile'),
     
     #JWT Authentiation
-    path('api/profile-jwt/', views.viewpage_api_jwt, name = 'profile_api_jwt'),
-    path('api/editprofile-jwt/', views.editprofile_api_jwt, name = 'edit_profile_api_jwt'),
+    path('profile-jwt/', views.viewpage_api_jwt, name = 'profile_api_jwt'),
+    path('editprofile-jwt/', views.editprofile_api_jwt, name = 'edit_profile_api_jwt'),
 ]
