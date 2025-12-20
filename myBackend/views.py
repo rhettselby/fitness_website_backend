@@ -5,6 +5,26 @@ from django.shortcuts import render
 from django.contrib.auth import get_user_model
 
 from fitness.models import Cardio, Gym  # import the CONCRETE models, not Workout
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+def get_user_from_token(request):
+    auth_header = request.headers.get("Authorization", "")
+
+    if not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header.split(" ")[1]
+
+    try:
+        access_token = AccessToken(token)
+        user_id = access_token["user_id"]
+        return User.objects.get(id=user_id)
+    except (InvalidToken, TokenError, User.DoesNotExist):
+        return None
 
 #JSON Is User Authenticated Check
 
@@ -232,3 +252,68 @@ def leaderboard_api(request):
     response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
     response['Access-Control-Allow-Credentials'] = 'true'
     return response
+
+
+### JWT Authentication Leaderboard Version
+
+@csrf_exempt
+def leaderboard_api_jwt(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+    current_time = now_utc()
+    week_start = beginning_of_week(current_time)
+
+    start_datetime = week_start
+    end_datetime = current_time
+
+    cardio_counts = (
+        Cardio.objects
+        .filter(date__gte=start_datetime, date__lte=end_datetime)
+        .values("user")
+        .annotate(count=Count("id"))
+    )
+
+    gym_counts = (
+        Gym.objects
+        .filter(date__gte=start_datetime, date__lte=end_datetime)
+        .values("user")
+        .annotate(count=Count("id"))
+    )
+
+    totals = {}
+    for row in cardio_counts:
+        totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
+
+    for row in gym_counts:
+        totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
+
+    data = []
+    for user_id, workout_count in totals.items():
+        try:
+            user_obj = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            continue
+
+        try:
+            profile = Profile.objects.get(user=user_obj)
+            bio = profile.bio
+            location = profile.location
+        except Profile.DoesNotExist:
+            bio = None
+            location = None
+
+        data.append({
+            "username": user_obj.username,
+            "count": workout_count,
+            "bio": bio,
+            "location": location,
+        })
+
+    data.sort(key=lambda x: x["count"], reverse=True)
+
+    return JsonResponse({"leaderboard": data})
