@@ -180,3 +180,32 @@ def editprofile_api(request):
         form = forms.EditProfile(instance = profile)
     return JsonResponse({"success": False, "errors": form.errors}, status = 400)
 
+### JWT Authentication Version
+
+@csrf_exempt
+def editprofile_api_jwt(request):
+    if request.method == "OPTIONS":
+        return JsonResponse({})
+
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+    profile, _ = Profile.objects.get_or_create(user=user)
+
+    if request.method == "POST":
+        form = forms.EditProfile(request.POST, instance=profile)
+        if form.is_valid():
+            p = form.save()
+            return JsonResponse({
+                "success": True,
+                "profile": {
+                    "bio": p.bio,
+                    "location": p.location,
+                    "birthday": p.birthday.isoformat() if p.birthday else None,
+                }
+            })
+
+        return JsonResponse({"success": False, "errors": form.errors}, status=400)
+
+    return JsonResponse({"error": "Only POST allowed"}, status=405)
