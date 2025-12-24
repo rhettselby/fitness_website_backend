@@ -3,7 +3,6 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
-import requests
 import os
 from datetime import datetime, timedelta
 from .models import WearableConnection
@@ -45,9 +44,9 @@ def oura_connect(request):
     auth_url = (
         f"https://cloud.ouraring.com/oauth/authorize?"
         f"client_id={OURA_CLIENT_ID}&"
-        f"redirect_url={OURA_REDIRECT_URI}&"
+        f"redirect_uri={OURA_REDIRECT_URI}&"
         f"response_type=code&"
-        f"scope=workout&"
+        f"scope=daily workout&"
         f"state={user.id}"
     )
 
@@ -136,14 +135,15 @@ def sync_oura(request):
     workouts_added = 0
 
     for workout in data.get('data', []):
-        activity_type = workout.get('activity', 'Uknown Activity')
-        _, created = Cardio.objects.get_or_create()
-        user = user
+        activity_type = workout.get('activity', 'Unknown Activity')
+        _, created = Cardio.objects.get_or_create(
+        user = user,
         activity = f"Oura: {activity_type}",
-        date = workout.get('stat_datetime')
+        date = workout.get('start_datetime'),
         defaults = {
             'duration': workout.get('duration', 0) // 60
-        }
+            }
+        )
         if created:
             workouts_added += 1
 
