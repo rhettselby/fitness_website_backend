@@ -114,6 +114,7 @@ def oura_callback(request):
 
     )
 
+    create_webhook_subscription(token_data['access_token'])
     return JsonResponse({"success": True, "message": "Oura connected!"})
 
 
@@ -221,3 +222,24 @@ def oura_webhook(request):
             return JsonResponse({'error': str(e)}, status = 500)
         
     return JsonResponse({'status': 'success'})
+
+
+def create_webhook_subscription(user_access_token):
+    response = requests.post(
+        'https://api.ouraring.com/v2/webhook/subscription',
+        headers={'Authorization': f'Bearer {user_access_token}'},
+        json={
+            'callback_url': f'{OURA_REDIRECT_URI.rsplit("/", 2)[0]}/webhook/',
+            'verification_token': OURA_WEBHOOK_SECRET,
+            'event_type': 'create',
+            'data_type': 'workout',
+        }
+    )
+
+    if response.status_code == 200:
+        return response.json()
+        
+    else:
+        print(f"Failed to create webhook subscription: {response.status_code} - {response.text}")
+        return None
+
