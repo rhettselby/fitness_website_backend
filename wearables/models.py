@@ -16,6 +16,7 @@ class WearableConnection (models.Model):
     created_at = models.DateTimeField(auto_now_add = True)
     last_sync = models.DateTimeField(null = True, blank = True)
     updated_at = models.DateTimeField(auto_now = True)
+    external_user_id = models.CharField(max_length=100, null=True, blank=True)
 
     class Meta:
         unique_together = ['user', 'device_type']

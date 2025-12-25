@@ -7,11 +7,16 @@ import os
 from datetime import datetime, timedelta
 from .models import WearableConnection
 from fitness.models import Cardio
+import requests
+import hashlib
+import hmac
+import json
 
 
 OURA_CLIENT_ID = os.environ.get('OURA_CLIENT_ID')
 OURA_CLIENT_SECRET = os.environ.get('OURA_CLIENT_SECRET')
 OURA_REDIRECT_URI = os.environ.get('OURA_REDIRECT_URI')
+OURA_WEBHOOK_SECRET = os.environ.get('OURA_WEBHOOK_SECRET')
 
 
 #Helper Function
@@ -80,11 +85,20 @@ def oura_callback(request):
         }
     )
 
-
     if token_response.status_code != 200:
         return JsonResponse({"error": "Failed to exchange token"}, status = 400)
 
     token_data = token_response.json()
+
+    headers = {'Authorization': f'Bearer {token_data["access_token"]}'}
+    user_info_response = requests.get( #python request for makking HTTP call to external API
+        'https://api.ouraring.com/v2/usercollection/personal_info',
+        headers=headers
+    )
+
+    oura_user_id = None
+    if user_info_response.status_code == 200:
+        oura_user_id = user_info_response.json().get('id')
 
 # updates if finds user+oura, creates if does not find
     WearableConnection.objects.update_or_create(
@@ -95,6 +109,7 @@ def oura_callback(request):
             'refresh_token': token_data['refresh_token'],
             'expires_at': datetime.now() + timedelta(seconds = token_data['expires_in']),
             'is_active': True,
+            'external_user_id': oura_user_id,
         }
 
     )
@@ -102,20 +117,18 @@ def oura_callback(request):
     return JsonResponse({"success": True, "message": "Oura connected!"})
 
 
+##Helper function to add workouts
+def sync_oura_for_user(user):
 
-@csrf_exempt
-def sync_oura(request):
-
-    user = get_user_from_token(request)
-
-    if not user:
-        return JsonResponse({"error": "Authentication Required"}, status = 401)
-    
     try:
-        connection = WearableConnection.objects.get(user = user, device_type = 'oura', is_active = True)
-
+        connection = WearableConnection.objects.get(
+            user=user,
+            device_type='oura',
+            is_active=True
+        )
+    
     except WearableConnection.DoesNotExist:
-        return JsonResponse({"error": "Oura Not Connected"}, status = 400)
+        raise Exception("Oura Not Connected")
     
     end_date = datetime.now().date()
     start_date = end_date - timedelta(days=7)
@@ -124,32 +137,87 @@ def sync_oura(request):
 
     response = requests.get(
         f'https://api.ouraring.com/v2/usercollection/workout?start_date={start_date}&end_date={end_date}',
-            headers=headers
-        )
-    
+        headers=headers
+    )
+
     if response.status_code != 200:
-        return JsonResponse({"error": "Failed to fetch Oura data"}, status = 400)
+        raise Exception("Failed to fetch Oura data")
     
     data = response.json()
-
     workouts_added = 0
 
     for workout in data.get('data', []):
         activity_type = workout.get('activity', 'Unknown Activity')
         _, created = Cardio.objects.get_or_create(
-        user = user,
-        activity = f"Oura: {activity_type}",
-        date = workout.get('start_datetime'),
-        defaults = {
-            'duration': workout.get('duration', 0) // 60
+            user = user,
+            activity=f"Oura: {activity_type}",
+            date=workout.get('start_datetime'),
+            defaults={
+                'duration': workout.get('duration', 0) // 60
             }
         )
-        if created:
-            workouts_added += 1
+        if created: workouts_added += 1
 
     connection.last_sync = datetime.now()
     connection.save()
 
-    return JsonResponse({"success": True, "workouts_added": workouts_added})
+    return {"success": True, "workouts_added": workouts_added}
 
 
+
+
+
+@csrf_exempt
+def sync_oura(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    try:
+        result = sync_oura_for_user(user)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    
+
+#Oura Webhook function
+
+@csrf_exempt
+def oura_webhook(request):
+
+    signature = request.headers.get('X-Oura-Signature')
+    if signature and OURA_WEBHOOK_SECRET:
+        expected_signature = hmac.new(
+            OURA_WEBHOOK_SECRET.encode(),
+            request.body,
+            hashlib.sha256 #uses sha hashing algorith
+        ).hexdigest() #converts hash into readable hexadecimal string
+
+        if signature != expected_signature:
+            return JsonResponse({'error': 'Invalid Signature'}, status = 401)
+        
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status = 400)
+    
+    event_type = data.get('event_type')
+    oura_user_id = data.get('user_id')
+
+    try: connection = WearableConnection.objects.get(
+        external_user_id=oura_user_id,
+        device_type='oura',
+        is_active=True
+    )
+    
+    except WearableConnection.DoesNotExist:
+        return JsonResponse({'error': 'User Not Found'}, status = 404)
+    
+    if event_type == 'workout.created':
+        try:
+            sync_oura_for_user(connection.user)
+        except Exception as e: # stores error in e
+            return JsonResponse({'error': str(e)}, status = 500)
+        
+    return JsonResponse({'status': 'success'})
