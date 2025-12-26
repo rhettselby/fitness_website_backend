@@ -80,3 +80,46 @@ def workout_log(request):
     workout_list.extend(gym)
     workout_list = sorted(workout_list, key=lambda w: w.date, reverse=True)
     return render(request, 'fitness/workout_view.html', {'workouts': workout_list})
+
+###############FINAL####VERSION#################
+
+def recent_workouts_api(request):
+    """
+    Get the most recent workouts from all users (public feed)
+    """
+    try:
+        # Get recent cardio and gym workouts
+        cardio = Cardio.objects.select_related('user').order_by('-date')[:15]
+        gym = Gym.objects.select_related('user').order_by('-date')[:15]
+        
+        workout_list = []
+        
+        # Add cardio workouts
+        for workout in cardio:
+            workout_list.append({
+                'id': workout.id,
+                'type': 'cardio',
+                'activity': workout.activity,
+                'date': workout.date.isoformat(),
+                'duration': workout.duration,
+                'username': workout.user.username,
+            })
+        
+        # Add gym workouts
+        for workout in gym:
+            workout_list.append({
+                'id': workout.id,
+                'type': 'gym',
+                'activity': workout.activity,
+                'date': workout.date.isoformat(),
+                'duration': workout.duration,
+                'username': workout.user.username,
+            })
+        
+        # Sort by date and get top 10
+        workout_list = sorted(workout_list, key=lambda w: w['date'], reverse=True)[:10]
+        
+        return JsonResponse({'workouts': workout_list}, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

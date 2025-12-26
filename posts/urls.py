@@ -10,6 +10,7 @@ urlpatterns = [
     path('', views.workout_log, name = "list"),
     path('api/new-post/', views.post_new_api, name = "new-post"),
     path('api/<slug:slug>', views.post_page_api, name = "page"),
+    path('api/recent-workouts/', views.recent_workouts_api, name='recent_workouts_api'),
 
 ]
 
