@@ -11,6 +11,7 @@ import requests
 import hashlib
 import hmac
 import json
+from django.shortcuts import redirect
 
 
 OURA_CLIENT_ID = os.environ.get('OURA_CLIENT_ID')
@@ -122,7 +123,7 @@ def oura_callback(request):
     )
 
     create_webhook_subscription(token_data['access_token'])
-    return JsonResponse({"success": True, "message": "Oura connected!"})
+    return redirect('https://fitnesswebsite-production.up.railway.app/profile')
 
 
 ##Helper function to add workouts
@@ -323,7 +324,7 @@ def strava_callback(request):
     )
 
     create_webhook_subscription(token_data['access_token'])
-    return JsonResponse({"success": True, "message": "Strava connected!"})
+    return redirect('https://fitnesswebsite-production.up.railway.app/profile')
 
 
 ##Helper function to add workouts
