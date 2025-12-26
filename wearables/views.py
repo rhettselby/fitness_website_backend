@@ -68,8 +68,8 @@ def oura_connect(request):
 @csrf_exempt
 def oura_callback(request):
 
-    code = request.Get.get('code')
-    user_id = request.Get.get('state')
+    code = request.GET.get('code')
+    user_id = request.GET.get('state')
 
     if not code or not user_id:
         return JsonResponse({"error": "Invalid callback"}, status = 400)
@@ -278,8 +278,8 @@ def strava_connect(request):
 @csrf_exempt
 def strava_callback(request):
 
-    code = request.Get.get('code')
-    user_id = request.Get.get('state')
+    code = request.GET.get('code')
+    user_id = request.GET.get('state')
 
     if not code or not user_id:
         return JsonResponse({"error": "Invalid callback"}, status = 400)
