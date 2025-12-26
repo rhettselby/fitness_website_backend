@@ -25,7 +25,9 @@ STRAVA_CLIENT_SECRET = os.environ.get('STRAVA_CLIENT_SECRET')
 STRAVA_REDIRECT_URI = os.environ.get('STRAVA_REDIRECT_URI')
 
 
-
+WHOOPE_CLIENT_ID = os.environ.get('WHOOP_CLIENT_ID')
+WHOOP_CLIENT_SECRET = os.environ.get('WHOOP_CLIENT_SECRET')
+WHOOP_REDIRECT_URI = os.environ.get('WHOOP_REDIRECT_URI')
 
 #Helper Function
 def get_user_from_token(request):
