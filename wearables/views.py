@@ -25,7 +25,7 @@ STRAVA_CLIENT_SECRET = os.environ.get('STRAVA_CLIENT_SECRET')
 STRAVA_REDIRECT_URI = os.environ.get('STRAVA_REDIRECT_URI')
 
 
-WHOOPE_CLIENT_ID = os.environ.get('WHOOP_CLIENT_ID')
+WHOOP_CLIENT_ID = os.environ.get('WHOOP_CLIENT_ID')
 WHOOP_CLIENT_SECRET = os.environ.get('WHOOP_CLIENT_SECRET')
 WHOOP_REDIRECT_URI = os.environ.get('WHOOP_REDIRECT_URI')
 
@@ -454,3 +454,180 @@ def create_strava_webhook_subscription(access_token=None):
     else:
         print(f"Failed to create Strava webhook: {response.status_code} - {response.text}")
         return None
+    
+
+
+
+    ################WHOOP###################################
+
+@csrf_exempt
+def whoop_connect(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    auth_url = (
+        f"https://api.prod.whoop.com/oauth/oauth2/auth?"
+        f"client_id={WHOOP_CLIENT_ID}&"
+        f"redirect_uri={WHOOP_REDIRECT_URI}&"
+        f"response_type=code&"
+        f"scope=read:workout read:recovery read:sleep&"
+        f"state={user.id}"
+    )
+    
+    return JsonResponse({"auth_url": auth_url})
+
+
+
+@csrf_exempt
+def whoop_callback(request):
+    code = request.GET.get('code')
+    user_id = request.GET.get('state')
+    
+    if not code or not user_id:
+        return JsonResponse({"error": "Invalid callback"}, status=400)
+    
+    try:
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User Not Found"}, status=404)
+    
+    # Exchange authorization code for access token
+    token_response = requests.post(
+        'https://api.prod.whoop.com/oauth/oauth2/token',
+        data={
+            'grant_type': 'authorization_code',
+            'code': code,
+            'client_id': WHOOP_CLIENT_ID,
+            'client_secret': WHOOP_CLIENT_SECRET,
+            'redirect_uri': WHOOP_REDIRECT_URI,
+        }
+    )
+    
+    if token_response.status_code != 200:
+        return JsonResponse({"error": "Failed to exchange token"}, status=400)
+    
+    token_data = token_response.json()
+    
+    # Get Whoop user info
+    headers = {'Authorization': f'Bearer {token_data["access_token"]}'}
+    user_info_response = requests.get(
+        'https://api.prod.whoop.com/developer/v1/user/profile/basic',
+        headers=headers
+    )
+    
+    whoop_user_id = None
+    if user_info_response.status_code == 200:
+        whoop_user_id = str(user_info_response.json().get('user_id'))
+    
+    # Save connection
+    WearableConnection.objects.update_or_create(
+        user=user,
+        device_type='whoop',
+        defaults={
+            'access_token': token_data['access_token'],
+            'refresh_token': token_data['refresh_token'],
+            'expires_at': datetime.now() + timedelta(seconds=token_data['expires_in']),
+            'is_active': True,
+            'external_user_id': whoop_user_id,
+        }
+    )
+    
+    return JsonResponse({"success": True, "message": "Whoop connected!"})
+
+
+
+def sync_whoop_for_user(user):
+    """Helper function to sync Whoop data for a specific user"""
+    try:
+        connection = WearableConnection.objects.get(
+            user=user,
+            device_type='whoop',
+            is_active=True
+        )
+    except WearableConnection.DoesNotExist:
+        raise Exception("Whoop not connected")
+    
+    # Whoop uses ISO format dates
+    end_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    
+    headers = {'Authorization': f'Bearer {connection.access_token}'}
+    
+    response = requests.get(
+        f'https://api.prod.whoop.com/developer/v1/activity/workout?start={start_date}&end={end_date}',
+        headers=headers
+    )
+    
+    if response.status_code != 200:
+        raise Exception("Failed to fetch Whoop data")
+    
+    data = response.json()
+    workouts_added = 0
+    
+    for workout in data.get('records', []):
+        sport_name = workout.get('sport_id', 'Unknown Activity')  # Whoop uses sport_id
+        whoop_workout_id = str(workout.get('id'))
+        workout_start = workout.get('start')
+        
+        _, created = Cardio.objects.get_or_create(
+            user=user,
+            external_id=f"whoop_{whoop_workout_id}",
+            defaults={
+                'activity': f"Whoop: {sport_name}",
+                'date': workout_start,
+                'duration': workout.get('score', {}).get('strain', 0)  # Whoop doesn't have duration, using strain
+            }
+        )
+        if created:
+            workouts_added += 1
+    
+    connection.last_sync = datetime.now()
+    connection.save()
+    
+    return {"success": True, "workouts_added": workouts_added}
+
+
+@csrf_exempt
+def sync_whoop(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    try:
+        result = sync_whoop_for_user(user)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    
+
+@csrf_exempt
+def whoop_webhook(request):
+    """Handle incoming Whoop webhook notifications"""
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    # Extract event info
+    event_type = data.get('type')  # e.g., "workout.updated"
+    whoop_user_id = str(data.get('user_id'))
+    
+    # Only process workout events
+    if event_type and 'workout' in event_type:
+        try:
+            connection = WearableConnection.objects.get(
+                external_user_id=whoop_user_id,
+                device_type='whoop',
+                is_active=True
+            )
+            sync_whoop_for_user(connection.user)
+        except WearableConnection.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+    
+    return JsonResponse({'status': 'success'})
