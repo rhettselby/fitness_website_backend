@@ -295,8 +295,7 @@ def strava_callback(request):
         'https://www.strava.com/oauth/token',
         data={
             'grant_type': 'authorization_code',  
-            'code': code,                         # The code Oura sent us
-            'redirect_uri': STRAVA_REDIRECT_URI,   
+            'code': code,                     
             'client_id': STRAVA_CLIENT_ID,        
             'client_secret': STRAVA_CLIENT_SECRET,
         }
@@ -307,7 +306,7 @@ def strava_callback(request):
 
     token_data = token_response.json()
 
-    strava_athlete_id = str(token_data.get('athlete', {}))
+    strava_athlete_id = str(token_data.get('athlete', {}).get('id'))
 
 # updates if finds user+oura, creates if does not find
     WearableConnection.objects.update_or_create(
@@ -333,40 +332,43 @@ def sync_strava_for_user(user):
     try:
         connection = WearableConnection.objects.get(
             user=user,
-            device_type='oura',
+            device_type='strava',
             is_active=True
         )
     
     except WearableConnection.DoesNotExist:
-        raise Exception("Oura Not Connected")
+        raise Exception("Strava Not Connected")
     
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=7)
+    end_date = int(datetime.now().timestamp())
+    start_date = int((datetime.now() - timedelta(days=30)).timestamp())
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
 
     response = requests.get(
-        f'https://api.ouraring.com/v2/usercollection/workout?start_date={start_date}&end_date={end_date}',
+        f'https://www.strava.com/api/v3/athlete/activities?after={start_date}&before={end_date}',
         headers=headers
     )
 
     if response.status_code != 200:
-        raise Exception("Failed to fetch Oura data")
+        raise Exception("Failed to fetch Strava data")
     
-    data = response.json()
+    activities = response.json()
     workouts_added = 0
 
-    for workout in data.get('data', []):
-        activity_type = workout.get('activity', 'Unknown Activity')
+    for activity in activities:
+        activity_type = activity.get('type', 'Unknown Activity')
+        activity_date = activity.get('start_date')
+
         _, created = Cardio.objects.get_or_create(
             user = user,
-            activity=f"Oura: {activity_type}",
-            date=workout.get('start_datetime'),
+            activity=f"Strava: {activity_type}",
+            date=activity_date,
             defaults={
-                'duration': workout.get('duration', 0) // 60
+                'duration': activity.get('moving_time', 0) // 60
             }
         )
-        if created: workouts_added += 1
+        if created:
+            workouts_added += 1
 
     connection.last_sync = datetime.now()
     connection.save()
@@ -375,3 +377,72 @@ def sync_strava_for_user(user):
 
 
 
+@csrf_exempt
+def sync_strava(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    try:
+        result = sync_strava_for_user(user)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@csrf_exempt
+def strava_webhook(request):
+
+    if request.method == "GET":
+        challenge = request.GET.get('hub.challenge')
+        return JsonResponse({'hub.challenge': challenge})
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status = 400)
+
+    
+    object_type = data.get('object_type')
+    aspect_type = data.get('aspect_type')
+    athlete_id = str(data.get('owner_id'))
+
+
+    if object_type == 'activity' and aspect_type == 'create':
+        try: 
+            connection = WearableConnection.objects.get(
+                external_user_id=athlete_id,
+                device_type='strava',
+                is_active=True
+            )
+            sync_strava_for_user(connection.user)
+    
+        except WearableConnection.DoesNotExist:
+            return JsonResponse({'error': 'User Not Found'}, status = 404)
+    
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status = 500)
+        
+    return JsonResponse({'status': 'success'})
+
+
+
+def create_strava_webhook_subscription(access_token=None):
+#strava webhooks are app wide, not per user like Oura
+    
+    response = requests.post(
+        'https://www.strava.com/api/v3/push_subscriptions',
+        data={
+            'client_id': STRAVA_CLIENT_ID,
+            'client_secret': STRAVA_CLIENT_SECRET,
+            'callback_url': f'{STRAVA_REDIRECT_URI.rsplit("/", 2)[0]}/webhook/',
+            'verify_token': 'STRAVA_WEBHOOK_VERIFY'
+        }
+    )
+    
+    if response.status_code in [200, 201]:
+        return response.json()
+    else:
+        print(f"Failed to create Strava webhook: {response.status_code} - {response.text}")
+        return None
