@@ -157,13 +157,14 @@ def sync_oura_for_user(user):
 
     for workout in data.get('data', []):
         activity_type = workout.get('activity', 'Unknown Activity')
-        oura_workout_id = workout.get('id')
-        
+        oura_workout_id = str(workout.get('id'))
+    
         _, created = Cardio.objects.get_or_create(
-            user = user,
-            activity=f"Oura: {activity_type} (ID: {oura_workout_id})",  #Include ID in activity name
-            date=workout.get('start_datetime'),
+            user=user,
+            external_id=f"oura_{oura_workout_id}",  # Use this for uniqueness
             defaults={
+                'activity': f"Oura: {activity_type}",
+                'date': workout.get('start_datetime'),
                 'duration': workout.get('duration', 0) // 60
             }
         )
@@ -361,13 +362,14 @@ def sync_strava_for_user(user):
     for activity in activities:
         activity_type = activity.get('type', 'Unknown Activity')
         activity_date = activity.get('start_date')
-        strava_activity_id = activity.get('id')  #Strava's unique ID
-
+        strava_activity_id = str(activity.get('id'))
+    
         _, created = Cardio.objects.get_or_create(
-            activity=f"Strava: {activity_type} (ID: {strava_activity_id})", 
-            user = user,
-            date=activity_date,
+            user=user,
+            external_id=f"strava_{strava_activity_id}",  # Use this for uniqueness
             defaults={
+                'activity': f"Strava: {activity_type}",
+                'date': activity_date,
                 'duration': activity.get('moving_time', 0) // 60
             }
         )

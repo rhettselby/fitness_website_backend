@@ -21,6 +21,7 @@ class Workout(models.Model):
 class Cardio(Workout):
     activity = models.CharField(max_length = 75)
     duration = models.FloatField(default = 60)
+    external_id = models.CharField(max_length=100, null=True, blank=True)
     
     @property
     def model_name(self):
