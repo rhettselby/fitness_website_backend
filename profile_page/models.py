@@ -8,6 +8,6 @@ from django.contrib.auth.models import User
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE,related_name='profile')
     bio = models.TextField(blank=True)
-    birthday = models.TextField(blank = True)
+    birthday = models.DateField(null = True, blank = True)
     location = models.TextField(null = True, blank = True)
  

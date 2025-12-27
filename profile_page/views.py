@@ -1,3 +1,4 @@
+import json
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from fitness.models import Cardio, Gym
@@ -194,18 +195,24 @@ def editprofile_api_jwt(request):
     profile, _ = Profile.objects.get_or_create(user=user)
 
     if request.method == "POST":
-        form = forms.EditProfile(request.POST, instance=profile)
-        if form.is_valid():
-            p = form.save()
-            return JsonResponse({
-                "success": True,
-                "profile": {
-                    "bio": p.bio,
-                    "location": p.location,
-                    "birthday": p.birthday.isoformat() if p.birthday else None,
-                }
-            })
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-        return JsonResponse({"success": False, "errors": form.errors}, status=400)
+        profile.bio = data.get("bio", "")
+        profile.location = data.get("location", "")
+        profile.birthday = data.get("birthday") or None
+
+        profile.save()
+
+        return JsonResponse({
+            "success": True,
+            "profile": {
+                "bio": profile.bio,
+                "location": profile.location,
+                "birthday": profile.birthday.isoformat() if profile.birthday else None,
+            }
+        })
 
     return JsonResponse({"error": "Only POST allowed"}, status=405)
