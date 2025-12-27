@@ -4,7 +4,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 from .models import WearableConnection
 from fitness.models import Cardio
 import requests
@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 from django.shortcuts import redirect
+from django.utils import timezone
 
 
 OURA_CLIENT_ID = os.environ.get('OURA_CLIENT_ID')
@@ -117,7 +118,7 @@ def oura_callback(request):
         defaults = {
             'access_token': token_data['access_token'],
             'refresh_token': token_data['refresh_token'],
-            'expires_at': datetime.now() + timedelta(seconds = token_data['expires_in']),
+            'expires_at': timezone.now() + timedelta(seconds = token_data['expires_in']),
             'is_active': True,
             'external_user_id': oura_user_id,
         }
@@ -141,7 +142,7 @@ def sync_oura_for_user(user):
     except WearableConnection.DoesNotExist:
         raise Exception("Oura Not Connected")
     
-    end_date = datetime.now().date()
+    end_date = timezone.now().date()
     start_date = end_date - timedelta(days=7)
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
@@ -172,7 +173,7 @@ def sync_oura_for_user(user):
         )
         if created: workouts_added += 1
 
-    connection.last_sync = datetime.now()
+    connection.last_sync = timezone.now()
     connection.save()
 
     return {"success": True, "workouts_added": workouts_added}
@@ -321,14 +322,13 @@ def strava_callback(request):
         defaults = {
             'access_token': token_data['access_token'],
             'refresh_token': token_data['refresh_token'],
-            'expires_at': datetime.now() + timedelta(seconds = token_data['expires_in']),
+            'expires_at': timezone.now() + timedelta(seconds = token_data['expires_in']),
             'is_active': True,
             'external_user_id': strava_athlete_id,
         }
 
     )
 
-    create_webhook_subscription(token_data['access_token'])
     return redirect('https://fitnesswebsite-production.up.railway.app/profile')
 
 
@@ -345,8 +345,8 @@ def sync_strava_for_user(user):
     except WearableConnection.DoesNotExist:
         raise Exception("Strava Not Connected")
     
-    end_date = int(datetime.now().timestamp())
-    start_date = int((datetime.now() - timedelta(days=30)).timestamp())
+    end_date = int(timezone.now().timestamp())
+    start_date = int((timezone.now() - timedelta(days=30)).timestamp())
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
 
@@ -378,7 +378,7 @@ def sync_strava_for_user(user):
         if created:
             workouts_added += 1
 
-    connection.last_sync = datetime.now()
+    connection.last_sync = timezone.now()
     connection.save()
 
     return {"success": True, "workouts_added": workouts_added}
@@ -528,13 +528,13 @@ def whoop_callback(request):
         defaults={
             'access_token': token_data['access_token'],
             'refresh_token': token_data['refresh_token'],
-            'expires_at': datetime.now() + timedelta(seconds=token_data['expires_in']),
+            'expires_at': timezone.now() + timedelta(seconds=token_data['expires_in']),
             'is_active': True,
             'external_user_id': whoop_user_id,
         }
     )
     
-    return JsonResponse({"success": True, "message": "Whoop connected!"})
+    return redirect('https://fitnesswebsite-production.up.railway.app/profile')
 
 
 
@@ -550,8 +550,8 @@ def sync_whoop_for_user(user):
         raise Exception("Whoop not connected")
     
     # Whoop uses ISO format dates
-    end_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
-    start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    end_date = timezone.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    start_date = (timezone.now() - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
     
     headers = {'Authorization': f'Bearer {connection.access_token}'}
     
@@ -583,7 +583,7 @@ def sync_whoop_for_user(user):
         if created:
             workouts_added += 1
     
-    connection.last_sync = datetime.now()
+    connection.last_sync = timezone.now()
     connection.save()
     
     return {"success": True, "workouts_added": workouts_added}
