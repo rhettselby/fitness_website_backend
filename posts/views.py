@@ -105,14 +105,14 @@ def recent_workouts_api(request):
                 'username': workout.user.username,
             })
         
-        # Add gym workouts
+        # Add gym workouts (duration will be null)
         for workout in gym:
             workout_list.append({
                 'id': workout.id,
                 'type': 'gym',
                 'activity': workout.activity,
                 'date': workout.date.isoformat(),
-                'duration': workout.duration,
+                'duration': None,  # Gym workouts don't have duration
                 'username': workout.user.username,
             })
         
