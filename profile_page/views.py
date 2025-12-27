@@ -1,3 +1,4 @@
+from datetime import date
 import json
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
@@ -202,10 +203,11 @@ def editprofile_api_jwt(request):
 
         profile.bio = data.get("bio", "")
         profile.location = data.get("location", "")
-        profile.birthday = data.get("birthday") or None
+
+        birthday_str = data.get("birthday")
+        profile.birthday = date.fromisoformat(birthday_str) if birthday_str else None
 
         profile.save()
-
         return JsonResponse({
             "success": True,
             "profile": {
