@@ -183,7 +183,6 @@ def login_view_api(request):
 @csrf_exempt
 def login_view_api_jwt(request):
 
-    print("🔥 JWT LOGIN VIEW HIT")
     # Handle CORS preflight requests
     if request.method == 'OPTIONS':
         response = JsonResponse({})
