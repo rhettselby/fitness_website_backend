@@ -131,17 +131,40 @@ def oura_callback(request):
 
 ##Helper function to add workouts
 def sync_oura_for_user(user):
-
     try:
         connection = WearableConnection.objects.get(
             user=user,
             device_type='oura',
             is_active=True
         )
-    
     except WearableConnection.DoesNotExist:
         raise Exception("Oura Not Connected")
     
+    # REFRESH TOKEN IF EXPIRED (Oura tokens last longer but still good to check)
+    if connection.expires_at and timezone.now() >= connection.expires_at:
+        print(f"Refreshing expired Oura token for user {user.id}")
+        token_response = requests.post(
+            'https://api.ouraring.com/oauth/token',
+            data={
+                'grant_type': 'refresh_token',
+                'refresh_token': connection.refresh_token,
+                'client_id': OURA_CLIENT_ID,
+                'client_secret': OURA_CLIENT_SECRET,
+            }
+        )
+        
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            connection.access_token = token_data['access_token']
+            connection.refresh_token = token_data['refresh_token']
+            connection.expires_at = timezone.now() + timedelta(seconds=token_data['expires_in'])
+            connection.save()
+            print(f"Oura token refreshed successfully for user {user.id}")
+        else:
+            print(f"Failed to refresh Oura token: {token_response.status_code} - {token_response.text}")
+            raise Exception("Failed to refresh Oura token")
+    
+    # Rest of your existing Oura sync code...
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=7)
 
@@ -153,7 +176,8 @@ def sync_oura_for_user(user):
     )
 
     if response.status_code != 200:
-        raise Exception("Failed to fetch Oura data")
+        print(f"Failed to fetch Oura workouts: {response.status_code} - {response.text}")
+        raise Exception(f"Failed to fetch Oura data: {response.status_code}")
     
     data = response.json()
     workouts_added = 0
@@ -164,21 +188,20 @@ def sync_oura_for_user(user):
     
         _, created = Cardio.objects.get_or_create(
             user=user,
-            external_id=f"oura_{oura_workout_id}",  # Use this for uniqueness
+            external_id=f"oura_{oura_workout_id}",
             defaults={
                 'activity': f"Oura: {activity_type}",
                 'date': workout.get('start_datetime'),
                 'duration': workout.get('duration', 0) // 60
             }
         )
-        if created: workouts_added += 1
+        if created: 
+            workouts_added += 1
 
     connection.last_sync = timezone.now()
     connection.save()
 
     return {"success": True, "workouts_added": workouts_added}
-
-
 
 
 
@@ -334,17 +357,40 @@ def strava_callback(request):
 
 ##Helper function to add workouts
 def sync_strava_for_user(user):
-
     try:
         connection = WearableConnection.objects.get(
             user=user,
             device_type='strava',
             is_active=True
         )
-    
     except WearableConnection.DoesNotExist:
         raise Exception("Strava Not Connected")
     
+    # REFRESH TOKEN IF EXPIRED
+    if connection.expires_at and timezone.now() >= connection.expires_at:
+        print(f"Refreshing expired Strava token for user {user.id}")
+        token_response = requests.post(
+            'https://www.strava.com/oauth/token',
+            data={
+                'client_id': STRAVA_CLIENT_ID,
+                'client_secret': STRAVA_CLIENT_SECRET,
+                'grant_type': 'refresh_token',
+                'refresh_token': connection.refresh_token,
+            }
+        )
+        
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            connection.access_token = token_data['access_token']
+            connection.refresh_token = token_data['refresh_token']
+            connection.expires_at = timezone.now() + timedelta(seconds=token_data['expires_in'])
+            connection.save()
+            print(f"Token refreshed successfully for user {user.id}")
+        else:
+            print(f"Failed to refresh token: {token_response.status_code} - {token_response.text}")
+            raise Exception("Failed to refresh Strava token")
+    
+    # NOW sync with fresh token
     end_date = int(timezone.now().timestamp())
     start_date = int((timezone.now() - timedelta(days=30)).timestamp())
 
@@ -356,7 +402,8 @@ def sync_strava_for_user(user):
     )
 
     if response.status_code != 200:
-        raise Exception("Failed to fetch Strava data")
+        print(f"Failed to fetch Strava activities: {response.status_code} - {response.text}")
+        raise Exception(f"Failed to fetch Strava data: {response.status_code}")
     
     activities = response.json()
     workouts_added = 0
@@ -368,7 +415,7 @@ def sync_strava_for_user(user):
     
         _, created = Cardio.objects.get_or_create(
             user=user,
-            external_id=f"strava_{strava_activity_id}",  # Use this for uniqueness
+            external_id=f"strava_{strava_activity_id}",
             defaults={
                 'activity': f"Strava: {activity_type}",
                 'date': activity_date,
@@ -382,8 +429,6 @@ def sync_strava_for_user(user):
     connection.save()
 
     return {"success": True, "workouts_added": workouts_added}
-
-
 
 @csrf_exempt
 def sync_strava(request):
@@ -537,7 +582,7 @@ def whoop_callback(request):
     return redirect('https://fitnesswebsite-production.up.railway.app/profile')
 
 
-
+####Automatic Adding Workouts ###
 def sync_whoop_for_user(user):
     """Helper function to sync Whoop data for a specific user"""
     try:
@@ -548,6 +593,30 @@ def sync_whoop_for_user(user):
         )
     except WearableConnection.DoesNotExist:
         raise Exception("Whoop not connected")
+    
+    # REFRESH TOKEN IF EXPIRED
+    if connection.expires_at and timezone.now() >= connection.expires_at:
+        print(f"Refreshing expired Whoop token for user {user.id}")
+        token_response = requests.post(
+            'https://api.prod.whoop.com/oauth/oauth2/token',
+            data={
+                'grant_type': 'refresh_token',
+                'refresh_token': connection.refresh_token,
+                'client_id': WHOOP_CLIENT_ID,
+                'client_secret': WHOOP_CLIENT_SECRET,
+            }
+        )
+        
+        if token_response.status_code == 200:
+            token_data = token_response.json()
+            connection.access_token = token_data['access_token']
+            connection.refresh_token = token_data['refresh_token']
+            connection.expires_at = timezone.now() + timedelta(seconds=token_data['expires_in'])
+            connection.save()
+            print(f"Whoop token refreshed successfully for user {user.id}")
+        else:
+            print(f"Failed to refresh Whoop token: {token_response.status_code} - {token_response.text}")
+            raise Exception("Failed to refresh Whoop token")
     
     # Whoop uses ISO format dates
     end_date = timezone.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
@@ -561,13 +630,14 @@ def sync_whoop_for_user(user):
     )
     
     if response.status_code != 200:
-        raise Exception("Failed to fetch Whoop data")
+        print(f"Failed to fetch Whoop workouts: {response.status_code} - {response.text}")
+        raise Exception(f"Failed to fetch Whoop data: {response.status_code}")
     
     data = response.json()
     workouts_added = 0
     
     for workout in data.get('records', []):
-        sport_name = workout.get('sport_id', 'Unknown Activity')  # Whoop uses sport_id
+        sport_name = workout.get('sport_id', 'Unknown Activity')
         whoop_workout_id = str(workout.get('id'))
         workout_start = workout.get('start')
         
@@ -577,7 +647,7 @@ def sync_whoop_for_user(user):
             defaults={
                 'activity': f"Whoop: {sport_name}",
                 'date': workout_start,
-                'duration': workout.get('score', {}).get('strain', 0)  # Whoop doesn't have duration, using strain
+                'duration': workout.get('score', {}).get('strain', 0)
             }
         )
         if created:
@@ -587,7 +657,6 @@ def sync_whoop_for_user(user):
     connection.save()
     
     return {"success": True, "workouts_added": workouts_added}
-
 
 @csrf_exempt
 def sync_whoop(request):
