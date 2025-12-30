@@ -126,7 +126,7 @@ def oura_callback(request):
     )
 
     create_webhook_subscription(token_data['access_token'])
-    return redirect('https://fitnesswebsite-production.up.railway.app/profile')
+    return redirect('https://fitness-website-delta-blush.vercel.app/profile')
 
 
 ##Helper function to add workouts
@@ -352,7 +352,7 @@ def strava_callback(request):
 
     )
 
-    return redirect('https://fitnesswebsite-production.up.railway.app/profile')
+    return redirect('https://fitness-website-delta-blush.vercel.app/profile')
 
 
 ##Helper function to add workouts
@@ -579,7 +579,7 @@ def whoop_callback(request):
         }
     )
     
-    return redirect('https://fitnesswebsite-production.up.railway.app/profile')
+    return redirect('https://fitness-website-delta-blush.vercel.app/profile')
 
 
 ####Automatic Adding Workouts ###
