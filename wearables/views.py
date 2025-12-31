@@ -126,7 +126,7 @@ def oura_callback(request):
     )
 
     create_webhook_subscription(token_data['access_token'])
-    return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/profile')
+    return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/connect')
 
 
 ##Helper function to add workouts
