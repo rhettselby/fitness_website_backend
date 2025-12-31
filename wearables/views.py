@@ -463,22 +463,24 @@ def strava_webhook(request):
 
     if object_type == 'activity' and aspect_type == 'create':
         try: 
-            connection = WearableConnection.objects.get(
+            # Get the ACTIVE connection (use filter + first instead of get)
+            connection = WearableConnection.objects.filter(
                 external_user_id=athlete_id,
                 device_type='strava',
                 is_active=True
-            )
+            ).order_by('-id').first()  # Get the most recent one
+        
+            if not connection:
+                print(f"No active connection found for athlete {athlete_id}")
+                return JsonResponse({'error': 'User Not Found'}, status=404)
+        
             print(f"Found connection for athlete {athlete_id}, user {connection.user.id}")
-            
+        
             # Try to sync
             result = sync_strava_for_user(connection.user)
             print(f"Sync successful: {result}")
             return JsonResponse({'status': 'success', 'result': result})
-    
-        except WearableConnection.DoesNotExist:
-            print(f"No connection found for athlete {athlete_id}")
-            return JsonResponse({'error': 'User Not Found'}, status=404)
-    
+
         except Exception as e:
             # Log the full error
             import traceback
@@ -486,7 +488,7 @@ def strava_webhook(request):
             print(error_msg)
             print(traceback.format_exc())
             return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
-        
+    
     return JsonResponse({'status': 'success'})
 
     ################WHOOP###################################
