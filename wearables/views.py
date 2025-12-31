@@ -209,6 +209,19 @@ def sync_oura_for_user(user):
 #Oura Webhook function
 
 @csrf_exempt
+def sync_oura(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    try:
+        result = sync_oura_for_user(user)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+@csrf_exempt
 def oura_webhook(request):
 
     signature = request.headers.get('X-Oura-Signature')
