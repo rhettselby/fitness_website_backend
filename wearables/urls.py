@@ -22,5 +22,7 @@ urlpatterns = [
     path('strava/disconnect/', views.strava_disconnect, name='strava_disconnect'),
     path('oura/disconnect/', views.oura_disconnect, name='oura_disconnect'),
     path('whoop/disconnect/', views.whoop_disconnect, name='whoop_disconnect'),
+    
+    path('status/', views.check_connection_status, name='connection_status'),
 ]   
 

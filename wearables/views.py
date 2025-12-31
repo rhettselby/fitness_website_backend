@@ -762,3 +762,39 @@ def whoop_disconnect(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+
+
+
+######CHECK CONNECTION#######
+
+@csrf_exempt
+def check_connection_status(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    # Check which devices are connected
+    oura_connected = WearableConnection.objects.filter(
+        user=user,
+        device_type='oura',
+        is_active=True
+    ).exists()
+    
+    strava_connected = WearableConnection.objects.filter(
+        user=user,
+        device_type='strava',
+        is_active=True
+    ).exists()
+    
+    whoop_connected = WearableConnection.objects.filter(
+        user=user,
+        device_type='whoop',
+        is_active=True
+    ).exists()
+    
+    return JsonResponse({
+        'oura': oura_connected,
+        'strava': strava_connected,
+        'whoop': whoop_connected,
+    })
