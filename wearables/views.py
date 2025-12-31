@@ -140,7 +140,7 @@ def sync_oura_for_user(user):
     except WearableConnection.DoesNotExist:
         raise Exception("Oura Not Connected")
     
-    # REFRESH TOKEN IF EXPIRED (Oura tokens last longer but still good to check)
+    # REFRESH TOKEN IF EXPIRED
     if connection.expires_at and timezone.now() >= connection.expires_at:
         print(f"Refreshing expired Oura token for user {user.id}")
         token_response = requests.post(
@@ -164,20 +164,23 @@ def sync_oura_for_user(user):
             print(f"Failed to refresh Oura token: {token_response.status_code} - {token_response.text}")
             raise Exception("Failed to refresh Oura token")
     
-    # Rest of your existing Oura sync code...
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=7)
+    
+    print(f"Syncing Oura for user {user.id} from {start_date} to {end_date}")
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
 
-    response = requests.get(
-        f'https://api.ouraring.com/v2/usercollection/workout?start_date={start_date}&end_date={end_date}',
-        headers=headers
-    )
+    url = f'https://api.ouraring.com/v2/usercollection/workout?start_date={start_date}&end_date={end_date}'
+    print(f"Oura API URL: {url}")
+    
+    response = requests.get(url, headers=headers)
+
+    print(f"Oura API response status: {response.status_code}")
+    print(f"Oura API response: {response.text}")
 
     if response.status_code != 200:
-        print(f"Failed to fetch Oura workouts: {response.status_code} - {response.text}")
-        raise Exception(f"Failed to fetch Oura data: {response.status_code}")
+        raise Exception(f"Failed to fetch Oura data: {response.status_code} - {response.text}")
     
     data = response.json()
     workouts_added = 0
@@ -201,24 +204,8 @@ def sync_oura_for_user(user):
     connection.last_sync = timezone.now()
     connection.save()
 
+    print(f"Oura sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
-
-
-
-@csrf_exempt
-def sync_oura(request):
-    user = get_user_from_token(request)
-    
-    if not user:
-        return JsonResponse({'error': 'Authentication Required'}, status=401)
-    
-    try:
-        result = sync_oura_for_user(user)
-        return JsonResponse(result)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-    
-
 #Oura Webhook function
 
 @csrf_exempt
