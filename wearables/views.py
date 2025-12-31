@@ -13,7 +13,7 @@ import hmac
 import json
 from django.shortcuts import redirect
 from django.utils import timezone
-from dateutil import parser
+from django.utils.dateparse import parse_datetime
 
 
 OURA_CLIENT_ID = os.environ.get('OURA_CLIENT_ID')
@@ -197,8 +197,8 @@ def sync_oura_for_user(user, days_back=7):
             end = workout.get('end_datetime')
 
             if start and end:
-                start_dt = parser.isoparse(start)
-                end_dt = parser.isoparse(end)
+                start_dt = parse_datetime(start)
+                end_dt = parse_datetime(end)
                 duration_seconds = int((end_dt - start_dt).total_seconds())
             else:
                 duration_seconds = 0
