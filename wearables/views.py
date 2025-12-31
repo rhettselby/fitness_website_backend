@@ -13,6 +13,7 @@ import hmac
 import json
 from django.shortcuts import redirect
 from django.utils import timezone
+from dateutil import parser
 
 
 OURA_CLIENT_ID = os.environ.get('OURA_CLIENT_ID')
@@ -190,7 +191,21 @@ def sync_oura_for_user(user, days_back=7):
         oura_workout_id = str(workout.get('id'))
 
         duration_seconds = workout.get('duration', 0)
-        duration_minutes = duration_seconds // 60 if duration_seconds else 0
+
+        if not duration_seconds:
+            start = workout.get('start_datetime')
+            end = workout.get('end_datetime')
+
+            if start and end:
+                start_dt = parser.isoparse(start)
+                end_dt = parser.isoparse(end)
+                duration_seconds = int((end_dt - start_dt).total_seconds())
+            else:
+                duration_seconds = 0
+
+            duration_minutes = max(duration_seconds // 60, 1)
+        else:
+            duration_minutes = max(duration_seconds // 60, 1)
     
         _, created = Cardio.objects.get_or_create(
             user=user,
