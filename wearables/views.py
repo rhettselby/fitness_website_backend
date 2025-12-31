@@ -622,7 +622,7 @@ def whoop_callback(request):
 
 
 ####Automatic Adding Workouts ###
-def sync_whoop_for_user(user):
+def sync_whoop_for_user(user,days_back=30):
     """Helper function to sync Whoop data for a specific user"""
     try:
         connection = WearableConnection.objects.get(
@@ -658,8 +658,11 @@ def sync_whoop_for_user(user):
             raise Exception("Failed to refresh Whoop token")
     
     # Whoop uses ISO format dates
-    end_date = timezone.now().strftime('%Y-%m-%dT%H:%M:%S.000Z')
-    start_date = (timezone.now() - timedelta(days=30)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    end_time = timezone.now()
+    start_time = end_time - timedelta(days=days_back)
+
+    end_date = end_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    start_date = start_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
     
     headers = {'Authorization': f'Bearer {connection.access_token}'}
     
@@ -705,14 +708,14 @@ def sync_whoop(request):
         return JsonResponse({'error': 'Authentication Required'}, status=401)
     
     try:
-        result = sync_whoop_for_user(user)
+        result = sync_whoop_for_user(user, days_back=3)
         return JsonResponse(result)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
     
 
 @csrf_exempt
-def whoop_webhook(request):
+def whoop_webhook(request, days_back=1):
     """Handle incoming Whoop webhook notifications"""
     
     try:
