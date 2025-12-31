@@ -18,5 +18,9 @@ urlpatterns = [
     path('whoop/callback/', views.whoop_callback, name='whoop_callback'),
     path('whoop/sync/', views.sync_whoop, name='sync_whoop'),
     path('whoop/webhook/', views.whoop_webhook, name='whoop_webhook'),
+
+    path('strava/disconnect/', views.strava_disconnect, name='strava_disconnect'),
+    path('oura/disconnect/', views.oura_disconnect, name='oura_disconnect'),
+    path('whoop/disconnect/', views.whoop_disconnect, name='whoop_disconnect'),
 ]   
 

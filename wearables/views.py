@@ -281,7 +281,30 @@ def create_webhook_subscription(user_access_token):
         return None
 
 
-
+@csrf_exempt
+def oura_disconnect(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    try:
+        # Get all Oura connections for this user and deactivate them
+        connections = WearableConnection.objects.filter(
+            user=user,
+            device_type='oura',
+            is_active=True
+        )
+        
+        count = connections.count()
+        connections.delete()
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'Disconnected {count} Oura connection(s)'
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 #############STRAVA######################################
 
 
@@ -356,7 +379,7 @@ def strava_callback(request):
 
 
 ##Helper function to add workouts
-def sync_strava_for_user(user):
+def sync_strava_for_user(user, days_back=30):
     try:
         connection = WearableConnection.objects.get(
             user=user,
@@ -390,9 +413,9 @@ def sync_strava_for_user(user):
             print(f"Failed to refresh token: {token_response.status_code} - {token_response.text}")
             raise Exception("Failed to refresh Strava token")
     
-    # NOW sync with fresh token
+    # Use the days_back parameter
     end_date = int(timezone.now().timestamp())
-    start_date = int((timezone.now() - timedelta(days=30)).timestamp())
+    start_date = int((timezone.now() - timedelta(days=days_back)).timestamp())
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
 
@@ -438,7 +461,7 @@ def sync_strava(request):
         return JsonResponse({'error': 'Authentication Required'}, status=401)
     
     try:
-        result = sync_strava_for_user(user)
+        result = sync_strava_for_user(user, days_back=2)
         return JsonResponse(result)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -477,7 +500,7 @@ def strava_webhook(request):
             print(f"Found connection for athlete {athlete_id}, user {connection.user.id}")
         
             # Try to sync
-            result = sync_strava_for_user(connection.user)
+            result = sync_strava_for_user(connection.user, days_back=1)
             print(f"Sync successful: {result}")
             return JsonResponse({'status': 'success', 'result': result})
 
@@ -490,6 +513,31 @@ def strava_webhook(request):
             return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
     
     return JsonResponse({'status': 'success'})
+
+@csrf_exempt
+def strava_disconnect(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    try:
+        # Get all Strava connections for this user and deactivate them
+        connections = WearableConnection.objects.filter(
+            user=user,
+            device_type='strava',
+            is_active=True
+        )
+        
+        count = connections.count()
+        connections.delete()
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'Disconnected {count} Strava connection(s)'
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
     ################WHOOP###################################
 
@@ -688,3 +736,29 @@ def whoop_webhook(request):
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'status': 'success'})
+
+
+@csrf_exempt
+def whoop_disconnect(request):
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    try:
+        # Get all Whoop connections for this user and deactivate them
+        connections = WearableConnection.objects.filter(
+            user=user,
+            device_type='whoop',
+            is_active=True
+        )
+        
+        count = connections.count()
+        connections.delete()
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'Disconnected {count} Whoop connection(s)'
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
