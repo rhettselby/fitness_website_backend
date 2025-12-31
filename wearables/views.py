@@ -130,7 +130,7 @@ def oura_callback(request):
 
 
 ##Helper function to add workouts
-def sync_oura_for_user(user):
+def sync_oura_for_user(user, days_back=7):
     try:
         connection = WearableConnection.objects.get(
             user=user,
@@ -165,7 +165,7 @@ def sync_oura_for_user(user):
             raise Exception("Failed to refresh Oura token")
     
     end_date = timezone.now().date()
-    start_date = end_date - timedelta(days=7)
+    start_date = end_date - timedelta(days=days_back)
     
     print(f"Syncing Oura for user {user.id} from {start_date} to {end_date}")
 
@@ -188,6 +188,9 @@ def sync_oura_for_user(user):
     for workout in data.get('data', []):
         activity_type = workout.get('activity', 'Unknown Activity')
         oura_workout_id = str(workout.get('id'))
+
+        duration_seconds = workout.get('duration', 0)
+        duration_minutes = duration_seconds // 60 if duration_seconds else 0
     
         _, created = Cardio.objects.get_or_create(
             user=user,
@@ -195,7 +198,7 @@ def sync_oura_for_user(user):
             defaults={
                 'activity': f"Oura: {activity_type}",
                 'date': workout.get('start_datetime'),
-                'duration': workout.get('duration', 0) // 60
+                'duration': duration_minutes
             }
         )
         if created: 
@@ -216,7 +219,7 @@ def sync_oura(request):
         return JsonResponse({'error': 'Authentication Required'}, status=401)
     
     try:
-        result = sync_oura_for_user(user)
+        result = sync_oura_for_user(user, days_back=3)
         return JsonResponse(result)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -254,7 +257,7 @@ def oura_webhook(request):
     
     if event_type == 'workout.created':
         try:
-            sync_oura_for_user(connection.user)
+            sync_oura_for_user(connection.user, days_back=1)
         except Exception as e: # stores error in e
             return JsonResponse({'error': str(e)}, status = 500)
         
