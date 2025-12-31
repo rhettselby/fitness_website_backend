@@ -446,7 +446,6 @@ def sync_strava(request):
 
 @csrf_exempt
 def strava_webhook(request):
-
     if request.method == "GET":
         challenge = request.GET.get('hub.challenge')
         return JsonResponse({'hub.challenge': challenge})
@@ -454,13 +453,13 @@ def strava_webhook(request):
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status = 400)
-
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
     
     object_type = data.get('object_type')
     aspect_type = data.get('aspect_type')
     athlete_id = str(data.get('owner_id'))
-
+    
+    print(f"Strava webhook received: {object_type}/{aspect_type} for athlete {athlete_id}")
 
     if object_type == 'activity' and aspect_type == 'create':
         try: 
@@ -469,39 +468,26 @@ def strava_webhook(request):
                 device_type='strava',
                 is_active=True
             )
-            sync_strava_for_user(connection.user)
+            print(f"Found connection for athlete {athlete_id}, user {connection.user.id}")
+            
+            # Try to sync
+            result = sync_strava_for_user(connection.user)
+            print(f"Sync successful: {result}")
+            return JsonResponse({'status': 'success', 'result': result})
     
         except WearableConnection.DoesNotExist:
-            return JsonResponse({'error': 'User Not Found'}, status = 404)
+            print(f"No connection found for athlete {athlete_id}")
+            return JsonResponse({'error': 'User Not Found'}, status=404)
     
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status = 500)
+            # Log the full error
+            import traceback
+            error_msg = f"Error syncing Strava for athlete {athlete_id}: {str(e)}"
+            print(error_msg)
+            print(traceback.format_exc())
+            return JsonResponse({'error': str(e), 'traceback': traceback.format_exc()}, status=500)
         
     return JsonResponse({'status': 'success'})
-
-
-
-def create_strava_webhook_subscription(access_token=None):
-#strava webhooks are app wide, not per user like Oura
-    
-    response = requests.post(
-        'https://www.strava.com/api/v3/push_subscriptions',
-        data={
-            'client_id': STRAVA_CLIENT_ID,
-            'client_secret': STRAVA_CLIENT_SECRET,
-            'callback_url': f'{STRAVA_REDIRECT_URI.rsplit("/", 2)[0]}/webhook/',
-            'verify_token': 'STRAVA_WEBHOOK_VERIFY'
-        }
-    )
-    
-    if response.status_code in [200, 201]:
-        return response.json()
-    else:
-        print(f"Failed to create Strava webhook: {response.status_code} - {response.text}")
-        return None
-    
-
-
 
     ################WHOOP###################################
 
