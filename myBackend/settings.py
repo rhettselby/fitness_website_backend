@@ -173,6 +173,8 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Specific origins
 CORS_ALLOWED_ORIGINS = [
+    "https://www.rhetts-fitness-community.com",
+    "http://www.rhetts-fitness-community.com",
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'https://fitness-website-gilt.vercel.app',
