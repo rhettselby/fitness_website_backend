@@ -595,107 +595,6 @@ def whoop_connect(request):
     
     return JsonResponse({"auth_url": auth_url})
 
-@csrf_exempt
-def whoop_callback(request):
-    print("Whoop Callback Received")
-    print(f"Request Method: {request.method}")
-    print(f"Request GET Parameters: {dict(request.GET)}")
-    
-    error = request.GET.get('error')
-    if error:
-        print(f"OAuth Error: {error}")
-        print(f"Error Description: {request.GET.get('error_description')}")
-        return JsonResponse({"error": "OAuth Error", "details": dict(request.GET)}, status=400)
-    
-    code = request.GET.get('code')
-    state = request.GET.get('state')
-    
-    print(f"Code: {code}")
-    print(f"State: {state}")
-    
-    if not code or not state:
-        print("Missing code or state")
-        return JsonResponse({"error": "Invalid callback", "details": {
-            "code_present": bool(code),
-            "state_present": bool(state)
-        }}, status=400)
-    
-    # Extract user ID from state
-    try:
-        # If state is just a random token, we need a different approach to get the user
-        from django.contrib.auth.models import User
-        
-        # Assuming the user is currently logged in, get the most recent user
-        user = User.objects.order_by('-last_login').first()
-        
-        if not user:
-            print("No user found")
-            return JsonResponse({"error": "No active user found"}, status=404)
-        
-        print(f"Using user: {user.username} (ID: {user.id})")
-    except Exception as e:
-        print(f"Error finding user: {str(e)}")
-        return JsonResponse({"error": "User identification failed"}, status=404)
-    
-    # Token exchange
-    print("Attempting token exchange...")
-    token_response = requests.post(
-        'https://api.prod.whoop.com/oauth/oauth2/token',
-        data={
-            'grant_type': 'authorization_code',
-            'code': code,
-            'client_id': WHOOP_CLIENT_ID,
-            'client_secret': WHOOP_CLIENT_SECRET,
-            'redirect_uri': WHOOP_REDIRECT_URI,
-        }
-    )
-    
-    print(f"Token Exchange Response Status: {token_response.status_code}")
-    print(f"Token Exchange Response Body: {token_response.text}")
-    
-    if token_response.status_code != 200:
-        return JsonResponse({
-            "error": "Failed to exchange token", 
-            "status_code": token_response.status_code,
-            "response_body": token_response.text
-        }, status=400)
-    
-    token_data = token_response.json()
-    
-    # User info retrieval
-    headers = {'Authorization': f'Bearer {token_data["access_token"]}'}
-    user_info_response = requests.get(
-        'https://api.prod.whoop.com/developer/v1/user/profile/basic',
-        headers=headers
-    )
-    
-    print(f"User Info Response Status: {user_info_response.status_code}")
-    print(f"User Info Response Body: {user_info_response.text}")
-    
-    whoop_user_id = None
-    if user_info_response.status_code == 200:
-        whoop_user_id = str(user_info_response.json().get('user_id'))
-        print(f"Whoop User ID: {whoop_user_id}")
-    
-    # Connection saving
-    try:
-        connection, created = WearableConnection.objects.update_or_create(
-            user=user,
-            device_type='whoop',
-            defaults={
-                'access_token': token_data['access_token'],
-                'refresh_token': token_data['refresh_token'],
-                'expires_at': timezone.now() + timedelta(seconds=token_data['expires_in']),
-                'is_active': True,
-                'external_user_id': whoop_user_id,
-            }
-        )
-        print(f"Connection {'created' if created else 'updated'}: {connection}")
-    except Exception as e:
-        print(f"Error saving connection: {str(e)}")
-        return JsonResponse({"error": "Failed to save connection", "details": str(e)}, status=500)
-    
-    return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/profile')
 
 
 ####Automatic Adding Workouts ###
@@ -789,7 +688,7 @@ def sync_whoop(request):
         return JsonResponse(result)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
-    
+
 
 @csrf_exempt
 def whoop_webhook(request, days_back=1):
@@ -819,6 +718,132 @@ def whoop_webhook(request, days_back=1):
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'status': 'success'})
+
+@csrf_exempt
+def whoop_callback(request):
+    print("Whoop Callback Received")
+    print(f"Request Method: {request.method}")
+    print(f"Request GET Parameters: {dict(request.GET)}")
+    
+    error = request.GET.get('error')
+    if error:
+        print(f"OAuth Error: {error}")
+        print(f"Error Description: {request.GET.get('error_description')}")
+        return JsonResponse({"error": "OAuth Error", "details": dict(request.GET)}, status=400)
+    
+    code = request.GET.get('code')
+    state = request.GET.get('state')
+    
+    print(f"Code: {code}")
+    print(f"State: {state}")
+    
+    if not code or not state:
+        print("Missing code or state")
+        return JsonResponse({"error": "Invalid callback", "details": {
+            "code_present": bool(code),
+            "state_present": bool(state)
+        }}, status=400)
+    
+    # Extract user ID from state
+    try:
+        # Fallback to most recently logged-in user
+        from django.contrib.auth.models import User
+        
+        user = User.objects.order_by('-last_login').first()
+        
+        if not user:
+            print("No user found")
+            return JsonResponse({"error": "No active user found"}, status=404)
+        
+        print(f"Using user: {user.username} (ID: {user.id})")
+    except Exception as e:
+        print(f"Error finding user: {str(e)}")
+        return JsonResponse({"error": "User identification failed"}, status=404)
+    
+    # Token exchange
+    print("Attempting token exchange...")
+    token_response = requests.post(
+        'https://api.prod.whoop.com/oauth/oauth2/token',
+        data={
+            'grant_type': 'authorization_code',
+            'code': code,
+            'client_id': WHOOP_CLIENT_ID,
+            'client_secret': WHOOP_CLIENT_SECRET,
+            'redirect_uri': WHOOP_REDIRECT_URI,
+        }
+    )
+    
+    print(f"Token Exchange Response Status: {token_response.status_code}")
+    print(f"Token Exchange Response Body: {token_response.text}")
+    
+    if token_response.status_code != 200:
+        return JsonResponse({
+            "error": "Failed to exchange token", 
+            "status_code": token_response.status_code,
+            "response_body": token_response.text
+        }, status=400)
+    
+    token_data = token_response.json()
+    
+    # User info retrieval with robust error handling
+    headers = {
+        'Authorization': f'Bearer {token_data["access_token"]}',
+        'Accept': 'application/json'
+    }
+    
+    try:
+        user_info_response = requests.get(
+            'https://api.prod.whoop.com/developer/v1/user/profile/basic',
+            headers=headers,
+            timeout=10
+        )
+        
+        print(f"User Info Response Status: {user_info_response.status_code}")
+        print(f"User Info Response Headers: {user_info_response.headers}")
+        print(f"User Info Response Body: {user_info_response.text}")
+        
+        # Handle different possible response scenarios
+        if user_info_response.status_code == 200:
+            user_info = user_info_response.json()
+            whoop_user_id = str(user_info.get('user_id'))
+        elif user_info_response.status_code == 401:
+            whoop_user_id = token_data.get('access_token')[-10:]
+        else:
+            whoop_user_id = None
+        
+        print(f"Extracted Whoop User ID: {whoop_user_id}")
+    
+    except requests.RequestException as e:
+        print(f"Request Error: {e}")
+        whoop_user_id = None
+    
+    # Connection saving with comprehensive error handling
+    try:
+        connection, created = WearableConnection.objects.update_or_create(
+            user=user,
+            device_type='whoop',
+            defaults={
+                'access_token': token_data['access_token'],
+                'refresh_token': token_data.get('refresh_token', ''),
+                'expires_at': timezone.now() + timedelta(seconds=token_data.get('expires_in', 3600)),
+                'is_active': True,
+                'external_user_id': whoop_user_id or str(user.id),
+            }
+        )
+        print(f"Connection {'created' if created else 'updated'}: {connection}")
+    except Exception as e:
+        print(f"Full error details: {type(e)} - {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        return JsonResponse({
+            "error": "Failed to save connection", 
+            "details": str(e),
+            "error_type": type(e).__name__
+        }, status=500)
+    
+    return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/profile')
+
 
 
 @csrf_exempt
