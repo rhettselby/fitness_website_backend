@@ -622,13 +622,20 @@ def whoop_callback(request):
     
     # Extract user ID from state
     try:
-        parts = state.split('_')
-        user_id = parts[1]
-        user = User.objects.get(id=user_id)
-        print(f"User found: {user.username}")
-    except (IndexError, User.DoesNotExist):
-        print(f"User not found with ID from state: {state}")
-        return JsonResponse({"error": "User Not Found"}, status=404)
+        # If state is just a random token, we need a different approach to get the user
+        from django.contrib.auth.models import User
+        
+        # Assuming the user is currently logged in, get the most recent user
+        user = User.objects.order_by('-last_login').first()
+        
+        if not user:
+            print("No user found")
+            return JsonResponse({"error": "No active user found"}, status=404)
+        
+        print(f"Using user: {user.username} (ID: {user.id})")
+    except Exception as e:
+        print(f"Error finding user: {str(e)}")
+        return JsonResponse({"error": "User identification failed"}, status=404)
     
     # Token exchange
     print("Attempting token exchange...")
@@ -689,6 +696,7 @@ def whoop_callback(request):
         return JsonResponse({"error": "Failed to save connection", "details": str(e)}, status=500)
     
     return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/profile')
+
 
 ####Automatic Adding Workouts ###
 def sync_whoop_for_user(user,days_back=30):
