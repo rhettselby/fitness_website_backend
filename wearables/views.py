@@ -279,25 +279,39 @@ def oura_webhook(request):
     return JsonResponse({'status': 'success'})
 
 
+####debugging##################
+
 def create_webhook_subscription(user_access_token):
+    webhook_url = 'https://fitnesswebsitebackend-production.up.railway.app/api/wearables/oura/webhook/'
+    
+    print(f"Attempting to create webhook with URL: {webhook_url}")
+    print(f"Using verification token: {OURA_WEBHOOK_SECRET}")
+
     response = requests.post(
         'https://api.ouraring.com/v2/webhook/subscription',
-        headers={'Authorization': f'Bearer {user_access_token}'},
+        headers={
+            'Authorization': f'Bearer {user_access_token}',
+            'Content-Type': 'application/json'
+        },
         json={
-            'callback_url': f'{OURA_REDIRECT_URI.rsplit("/", 2)[0]}/webhook/',
+            'callback_url': webhook_url,
             'verification_token': OURA_WEBHOOK_SECRET,
-            'event_type': 'create',
+            'event_type': 'workout.create',  # Specify exact event type
             'data_type': 'workout',
         }
     )
 
-    if response.status_code == 200:
-        return response.json()
-        
-    else:
-        print(f"Failed to create webhook subscription: {response.status_code} - {response.text}")
-        return None
+    print(f"Webhook creation response status: {response.status_code}")
+    print(f"Webhook creation response body: {response.text}")
 
+    if response.status_code == 200:
+        print("Webhook subscription successful")
+        return response.json()
+    else:
+        print(f"Webhook subscription failed: {response.status_code}")
+        print(f"Response body: {response.text}")
+        return None
+    
 
 @csrf_exempt
 def oura_disconnect(request):
