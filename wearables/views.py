@@ -14,6 +14,7 @@ import json
 from django.shortcuts import redirect
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+import secrets
 
 
 OURA_CLIENT_ID = os.environ.get('OURA_CLIENT_ID')
@@ -580,47 +581,56 @@ def whoop_connect(request):
     if not user:
         return JsonResponse({'error': 'Authentication Required'}, status=401)
     
+    # Generate a secure, random state parameter
+    state = f"{secrets.token_urlsafe(16)}_{user.id}"
+    
     auth_url = (
         f"https://api.prod.whoop.com/oauth/oauth2/auth?"
         f"client_id={WHOOP_CLIENT_ID}&"
         f"redirect_uri={WHOOP_REDIRECT_URI}&"
         f"response_type=code&"
         f"scope=read:workout&"
-        f"state={user.id}"
+        f"state={state}"
     )
     
     return JsonResponse({"auth_url": auth_url})
-
-
 
 @csrf_exempt
 def whoop_callback(request):
     print("Whoop Callback Received")
     print(f"Request Method: {request.method}")
     print(f"Request GET Parameters: {dict(request.GET)}")
-    print(f"Request headers: {dict(request.headers)}")
+    
+    error = request.GET.get('error')
+    if error:
+        print(f"OAuth Error: {error}")
+        print(f"Error Description: {request.GET.get('error_description')}")
+        return JsonResponse({"error": "OAuth Error", "details": dict(request.GET)}, status=400)
     
     code = request.GET.get('code')
-    user_id = request.GET.get('state')
+    state = request.GET.get('state')
     
     print(f"Code: {code}")
-    print(f"User ID: {user_id}")
+    print(f"State: {state}")
     
-    if not code or not user_id:
-        print("Missing code or user_id")
+    if not code or not state:
+        print("Missing code or state")
         return JsonResponse({"error": "Invalid callback", "details": {
             "code_present": bool(code),
-            "user_id_present": bool(user_id)
+            "state_present": bool(state)
         }}, status=400)
     
+    # Extract user ID from state
     try:
+        parts = state.split('_')
+        user_id = parts[1]
         user = User.objects.get(id=user_id)
         print(f"User found: {user.username}")
-    except User.DoesNotExist:
-        print(f"User not found with ID: {user_id}")
+    except (IndexError, User.DoesNotExist):
+        print(f"User not found with ID from state: {state}")
         return JsonResponse({"error": "User Not Found"}, status=404)
     
-    # Token exchange debugging
+    # Token exchange
     print("Attempting token exchange...")
     token_response = requests.post(
         'https://api.prod.whoop.com/oauth/oauth2/token',
@@ -645,7 +655,7 @@ def whoop_callback(request):
     
     token_data = token_response.json()
     
-    # User info retrieval debugging
+    # User info retrieval
     headers = {'Authorization': f'Bearer {token_data["access_token"]}'}
     user_info_response = requests.get(
         'https://api.prod.whoop.com/developer/v1/user/profile/basic',
@@ -660,7 +670,7 @@ def whoop_callback(request):
         whoop_user_id = str(user_info_response.json().get('user_id'))
         print(f"Whoop User ID: {whoop_user_id}")
     
-    # Connection saving debugging
+    # Connection saving
     try:
         connection, created = WearableConnection.objects.update_or_create(
             user=user,
@@ -679,6 +689,7 @@ def whoop_callback(request):
         return JsonResponse({"error": "Failed to save connection", "details": str(e)}, status=500)
     
     return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/profile')
+
 ####Automatic Adding Workouts ###
 def sync_whoop_for_user(user,days_back=30):
     """Helper function to sync Whoop data for a specific user"""
