@@ -685,7 +685,7 @@ def whoop_connect(request):
         f"client_id={WHOOP_CLIENT_ID}&"
         f"redirect_uri={WHOOP_REDIRECT_URI}&"
         f"response_type=code&"
-        f"scope=read:workout read:profile&"  # Added read:profile for more comprehensive access
+        f"scope=read:workout&"
         f"state={state}"
     )
     
