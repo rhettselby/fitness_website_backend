@@ -31,7 +31,7 @@ STRAVA_REDIRECT_URI = os.environ.get('STRAVA_REDIRECT_URI')
 
 WHOOP_CLIENT_ID = os.environ.get('WHOOP_CLIENT_ID')
 WHOOP_CLIENT_SECRET = os.environ.get('WHOOP_CLIENT_SECRET')
-WHOOP_REDIRECT_URI = os.environ.get('WHOOP_REDIRECT_URI')
+WHOOP_REDIRECT_URI = 'https://fitnesswebsitebackend-production.up.railway.app/api/wearables/whoop/callback/'
 
 #Helper Function
 def get_user_from_token(request):
