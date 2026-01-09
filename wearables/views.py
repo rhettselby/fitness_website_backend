@@ -1,3 +1,4 @@
+from venv import logger
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework_simplejwt.tokens import AccessToken
@@ -128,7 +129,7 @@ def oura_callback(request):
     )
 
     create_webhook_subscription(token_data['access_token'])
-    return redirect('https://www.rhetts-fitness-community.com/connect')
+    
 
 ##Helper function to add workouts
 def sync_oura_for_user(user, days_back=7):
@@ -573,29 +574,6 @@ def strava_disconnect(request):
 
     ################WHOOP###################################
 
-@csrf_exempt
-def whoop_connect(request):
-    user = get_user_from_token(request)
-    
-    if not user:
-        return JsonResponse({'error': 'Authentication Required'}, status=401)
-    
-    # Generate a secure, random state parameter
-    state = f"{secrets.token_urlsafe(16)}_{user.id}"
-    
-    auth_url = (
-        f"https://api.prod.whoop.com/oauth/oauth2/auth?"
-        f"client_id={WHOOP_CLIENT_ID}&"
-        f"redirect_uri={WHOOP_REDIRECT_URI}&"
-        f"response_type=code&"
-        f"scope=read:workout&"
-        f"state={state}"
-    )
-    
-    return JsonResponse({"auth_url": auth_url})
-
-
-
 ####Automatic Adding Workouts ###
 def sync_whoop_for_user(user,days_back=30):
     """Helper function to sync Whoop data for a specific user"""
@@ -689,135 +667,117 @@ def sync_whoop(request):
         return JsonResponse({"error": str(e)}, status=400)
 
 
+
+
 @csrf_exempt
-def whoop_webhook(request, days_back=1):
-    """Handle incoming Whoop webhook notifications"""
+def whoop_connect(request):
+    """Initiate Whoop OAuth connection process"""
+    user = get_user_from_token(request)
     
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
     
-    # Extract event info
-    event_type = data.get('type')  # e.g., "workout.updated"
-    whoop_user_id = str(data.get('user_id'))
+    # Generate a secure state parameter that includes user ID
+    state = f"{secrets.token_urlsafe(16)}_{user.id}"
     
-    # Only process workout events
-    if event_type and 'workout' in event_type:
-        try:
-            connection = WearableConnection.objects.get(
-                external_user_id=whoop_user_id,
-                device_type='whoop',
-                is_active=True
-            )
-            sync_whoop_for_user(connection.user)
-        except WearableConnection.DoesNotExist:
-            return JsonResponse({'error': 'User not found'}, status=404)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+    auth_url = (
+        f"https://api.prod.whoop.com/oauth/oauth2/auth?"
+        f"client_id={WHOOP_CLIENT_ID}&"
+        f"redirect_uri={WHOOP_REDIRECT_URI}&"
+        f"response_type=code&"
+        f"scope=read:workout read:profile&"  # Added read:profile for more comprehensive access
+        f"state={state}"
+    )
     
-    return JsonResponse({'status': 'success'})
+    return JsonResponse({"auth_url": auth_url})
 
 @csrf_exempt
 def whoop_callback(request):
-    print("Whoop Callback Received")
-    print(f"Request Method: {request.method}")
-    print(f"Request GET Parameters: {dict(request.GET)}")
+    """Handle Whoop OAuth callback"""
+    logger.info("Whoop Callback Initiated")
     
+    # Check for OAuth errors first
     error = request.GET.get('error')
     if error:
-        print(f"OAuth Error: {error}")
-        print(f"Error Description: {request.GET.get('error_description')}")
+        logger.error(f"OAuth Error: {error}")
+        logger.error(f"Error Description: {request.GET.get('error_description')}")
         return JsonResponse({"error": "OAuth Error", "details": dict(request.GET)}, status=400)
     
+    # Extract code and state
     code = request.GET.get('code')
     state = request.GET.get('state')
     
-    print(f"Code: {code}")
-    print(f"State: {state}")
-    
     if not code or not state:
-        print("Missing code or state")
-        return JsonResponse({"error": "Invalid callback", "details": {
-            "code_present": bool(code),
-            "state_present": bool(state)
-        }}, status=400)
-    
-    # Extract user ID from state
-    try:
-        # Fallback to most recently logged-in user
-        from django.contrib.auth.models import User
-        
-        user = User.objects.order_by('-last_login').first()
-        
-        if not user:
-            print("No user found")
-            return JsonResponse({"error": "No active user found"}, status=404)
-        
-        print(f"Using user: {user.username} (ID: {user.id})")
-    except Exception as e:
-        print(f"Error finding user: {str(e)}")
-        return JsonResponse({"error": "User identification failed"}, status=404)
-    
-    # Token exchange
-    print("Attempting token exchange...")
-    token_response = requests.post(
-        'https://api.prod.whoop.com/oauth/oauth2/token',
-        data={
-            'grant_type': 'authorization_code',
-            'code': code,
-            'client_id': WHOOP_CLIENT_ID,
-            'client_secret': WHOOP_CLIENT_SECRET,
-            'redirect_uri': WHOOP_REDIRECT_URI,
-        }
-    )
-    
-    print(f"Token Exchange Response Status: {token_response.status_code}")
-    print(f"Token Exchange Response Body: {token_response.text}")
-    
-    if token_response.status_code != 200:
+        logger.error("Invalid callback: Missing code or state")
         return JsonResponse({
-            "error": "Failed to exchange token", 
-            "status_code": token_response.status_code,
-            "response_body": token_response.text
+            "error": "Invalid callback", 
+            "details": {
+                "code_present": bool(code),
+                "state_present": bool(state)
+            }
         }, status=400)
     
-    token_data = token_response.json()
-    
-    # User info retrieval with robust error handling
-    headers = {
-        'Authorization': f'Bearer {token_data["access_token"]}',
-        'Accept': 'application/json'
-    }
-    
+    # Securely extract user ID from state
     try:
+        parts = state.split('_')
+        if len(parts) < 2:
+            logger.error("Invalid state parameter")
+            return JsonResponse({"error": "Invalid state parameter"}, status=400)
+        
+        user_id = parts[-1]
+        user = User.objects.get(id=user_id)
+        logger.info(f"User identified: {user.username}")
+    except User.DoesNotExist:
+        logger.error(f"User not found for ID: {user_id}")
+        return JsonResponse({"error": "User not found"}, status=404)
+    
+    # Token exchange
+    try:
+        token_response = requests.post(
+            'https://api.prod.whoop.com/oauth/oauth2/token',
+            data={
+                'grant_type': 'authorization_code',
+                'code': code,
+                'client_id': WHOOP_CLIENT_ID,
+                'client_secret': WHOOP_CLIENT_SECRET,
+                'redirect_uri': WHOOP_REDIRECT_URI,
+            }
+        )
+        
+        logger.info(f"Token Exchange Response Status: {token_response.status_code}")
+        
+        if token_response.status_code != 200:
+            logger.error(f"Token exchange failed: {token_response.text}")
+            return JsonResponse({
+                "error": "Failed to exchange token", 
+                "status_code": token_response.status_code,
+                "response_body": token_response.text
+            }, status=400)
+        
+        token_data = token_response.json()
+        
+        # User info retrieval
+        headers = {
+            'Authorization': f'Bearer {token_data["access_token"]}',
+            'Accept': 'application/json'
+        }
+        
         user_info_response = requests.get(
             'https://api.prod.whoop.com/developer/v1/user/profile/basic',
             headers=headers,
             timeout=10
         )
         
-        print(f"User Info Response Status: {user_info_response.status_code}")
-        print(f"User Info Response Headers: {user_info_response.headers}")
-        print(f"User Info Response Body: {user_info_response.text}")
+        logger.info(f"User Info Response Status: {user_info_response.status_code}")
         
-        # Handle different possible response scenarios
         if user_info_response.status_code == 200:
             user_info = user_info_response.json()
             whoop_user_id = str(user_info.get('user_id'))
-        elif user_info_response.status_code == 401:
-            whoop_user_id = token_data.get('access_token')[-10:]
         else:
-            whoop_user_id = None
+            # Fallback to generating a unique identifier
+            whoop_user_id = token_data.get('access_token')[-10:]
         
-        print(f"Extracted Whoop User ID: {whoop_user_id}")
-    
-    except requests.RequestException as e:
-        print(f"Request Error: {e}")
-        whoop_user_id = None
-    
-    # Connection saving with comprehensive error handling
-    try:
+        # Save or update connection
         connection, created = WearableConnection.objects.update_or_create(
             user=user,
             device_type='whoop',
@@ -826,34 +786,80 @@ def whoop_callback(request):
                 'refresh_token': token_data.get('refresh_token', ''),
                 'expires_at': timezone.now() + timedelta(seconds=token_data.get('expires_in', 3600)),
                 'is_active': True,
-                'external_user_id': whoop_user_id or str(user.id),
+                'external_user_id': whoop_user_id,
             }
         )
-        print(f"Connection {'created' if created else 'updated'}: {connection}")
-    except Exception as e:
-        print(f"Full error details: {type(e)} - {str(e)}")
-        import traceback
-        traceback.print_exc()
         
+        logger.info(f"Whoop connection {'created' if created else 'updated'}")
+        
+        return redirect('https://www.rhetts-fitness-community.com/connect')
+    
+    except requests.RequestException as req_err:
+        logger.error(f"Request Error: {req_err}")
         return JsonResponse({
-            "error": "Failed to save connection", 
-            "details": str(e),
-            "error_type": type(e).__name__
+            "error": "Network error during connection", 
+            "details": str(req_err)
         }, status=500)
     
-    return redirect('https://www.rhetts-fitness-community.com/connect')
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return JsonResponse({
+            "error": "Unexpected error during connection", 
+            "details": str(e)
+        }, status=500)
 
-
+@csrf_exempt
+def whoop_webhook(request):
+    """Handle incoming Whoop webhook notifications"""
+    logger.info("Whoop Webhook Received")
+    
+    try:
+        data = json.loads(request.body)
+        event_type = data.get('type')
+        whoop_user_id = str(data.get('user_id'))
+        
+        logger.info(f"Webhook Event: {event_type}, User ID: {whoop_user_id}")
+        
+        if event_type and 'workout' in event_type:
+            try:
+                connection = WearableConnection.objects.get(
+                    external_user_id=whoop_user_id,
+                    device_type='whoop',
+                    is_active=True
+                )
+                
+                sync_result = sync_whoop_for_user(connection.user, days_back=1)
+                logger.info(f"Sync Result: {sync_result}")
+                
+                return JsonResponse({'status': 'success', 'result': sync_result})
+            
+            except WearableConnection.DoesNotExist:
+                logger.warning(f"No active connection for Whoop user {whoop_user_id}")
+                return JsonResponse({'error': 'User not found'}, status=404)
+            
+            except Exception as sync_error:
+                logger.error(f"Sync Error: {sync_error}", exc_info=True)
+                return JsonResponse({'error': str(sync_error)}, status=500)
+        
+        return JsonResponse({'status': 'success'})
+    
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON in Whoop webhook")
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    except Exception as e:
+        logger.error(f"Unexpected Webhook Error: {e}", exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt
 def whoop_disconnect(request):
+    """Disconnect Whoop connection for the current user"""
     user = get_user_from_token(request)
     
     if not user:
         return JsonResponse({'error': 'Authentication Required'}, status=401)
     
     try:
-        # Get all Whoop connections for this user and deactivate them
         connections = WearableConnection.objects.filter(
             user=user,
             device_type='whoop',
@@ -863,13 +869,16 @@ def whoop_disconnect(request):
         count = connections.count()
         connections.delete()
         
+        logger.info(f"Disconnected {count} Whoop connection(s) for user {user.username}")
+        
         return JsonResponse({
             'success': True, 
             'message': f'Disconnected {count} Whoop connection(s)'
         })
+    
     except Exception as e:
+        logger.error(f"Disconnect Error: {e}", exc_info=True)
         return JsonResponse({'error': str(e)}, status=400)
-
 
 
 ######CHECK CONNECTION#######
