@@ -128,8 +128,7 @@ def oura_callback(request):
     )
 
     create_webhook_subscription(token_data['access_token'])
-    return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/connect')
-
+    return redirect('https://www.rhetts-fitness-community.com/connect')
 
 ##Helper function to add workouts
 def sync_oura_for_user(user, days_back=7):
@@ -408,7 +407,7 @@ def strava_callback(request):
 
     )
 
-    return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/profile')
+    return redirect('https://www.rhetts-fitness-community.com/connect')
 
 
 ##Helper function to add workouts
@@ -842,7 +841,7 @@ def whoop_callback(request):
             "error_type": type(e).__name__
         }, status=500)
     
-    return redirect('https://fitness-website-git-main-rhettselbys-projects.vercel.app/profile')
+    return redirect('https://www.rhetts-fitness-community.com/connect')
 
 
 
