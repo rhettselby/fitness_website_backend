@@ -1,5 +1,8 @@
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+
+from wearables.models import WearableConnection
+from wearables.views import sync_oura_for_user, sync_whoop_for_user
 from .models import Users
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import login, logout
@@ -237,6 +240,21 @@ def login_view_api_jwt(request):
         "success": False,
         "message": "Only POST method allowed",
     }, status=405)
+
+    oura_connection = WearableConnection.objects.filter(user=user,
+                                                        device_type='oura',
+                                                        is_active=True
+                                                        ).first()
+    
+    whoop_connection = WearableConnection.objects.filter(user=user,
+                                                        device_type='whoop',
+                                                        is_active=True
+                                                        ).first()
+    
+    if oura_connection:
+        sync_oura_for_user(user, days_back=3)
+    if whoop_connection:
+        sync_whoop_for_user(user, days_back=3)
     return response
 
 @csrf_exempt

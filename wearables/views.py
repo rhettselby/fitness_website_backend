@@ -571,6 +571,8 @@ def strava_disconnect(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+    
+
 
     ################WHOOP###################################
 
@@ -914,3 +916,27 @@ def check_connection_status(request):
         'strava': strava_connected,
         'whoop': whoop_connected,
     })
+
+
+
+
+#####SYNC CRON JOB #########
+
+from celery import shared_task
+from django.contrib.auth.models import User
+
+
+@shared_task
+def sync_user_wearables(user_id):
+    try:
+        user = User.objects.get(id=user_id)
+        sync_oura_for_user(user, days_back=3)
+        sync_whoop_for_user(user, days_back=3)
+    except Exception as e:
+        pass
+
+@shared_task
+def sync_all_wearables():
+    connections = WearableConnection.objects.filter(is_active=True)
+    for connection in connections:
+        sync_user_wearables.delay(connection.user.id)
