@@ -1,8 +1,6 @@
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 
-from wearables.models import WearableConnection
-from wearables.views import sync_oura_for_user, sync_whoop_for_user
 from .models import Users
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import login, logout
