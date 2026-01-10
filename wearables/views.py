@@ -129,6 +129,8 @@ def oura_callback(request):
     )
 
     create_webhook_subscription(token_data['access_token'])
+
+    return redirect('https://www.rhetts-fitness-community.com/connect')
     
 
 ##Helper function to add workouts
@@ -918,25 +920,3 @@ def check_connection_status(request):
     })
 
 
-
-
-#####SYNC CRON JOB #########
-
-from celery import shared_task
-from django.contrib.auth.models import User
-
-
-@shared_task
-def sync_user_wearables(user_id):
-    try:
-        user = User.objects.get(id=user_id)
-        sync_oura_for_user(user, days_back=3)
-        sync_whoop_for_user(user, days_back=3)
-    except Exception as e:
-        pass
-
-@shared_task
-def sync_all_wearables():
-    connections = WearableConnection.objects.filter(is_active=True)
-    for connection in connections:
-        sync_user_wearables.delay(connection.user.id)
