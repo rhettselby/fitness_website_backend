@@ -215,6 +215,16 @@ def login_view_api_jwt(request):
 
                 refresh = RefreshToken.for_user(user)
 
+                try:
+                    from wearables.models import WearableConnection
+                    from wearables.tasks import sync_user_wearables
+
+                    sync_user_wearables.delay(user.id)
+                except Exception as e:
+                    print(f"Background sync error: {e}")
+
+                refresh = RefreshToken.for_user(user)
+
                 response = JsonResponse({
                     "success": True,
                     "user": {
@@ -241,21 +251,10 @@ def login_view_api_jwt(request):
         "message": "Only POST method allowed",
     }, status=405)
 
-    oura_connection = WearableConnection.objects.filter(user=user,
-                                                        device_type='oura',
-                                                        is_active=True
-                                                        ).first()
     
-    whoop_connection = WearableConnection.objects.filter(user=user,
-                                                        device_type='whoop',
-                                                        is_active=True
-                                                        ).first()
-    
-    if oura_connection:
-        sync_oura_for_user(user, days_back=3)
-    if whoop_connection:
-        sync_whoop_for_user(user, days_back=3)
     return response
+
+
 
 @csrf_exempt
 def register_api(request):
