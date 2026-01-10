@@ -215,16 +215,6 @@ def login_view_api_jwt(request):
 
                 refresh = RefreshToken.for_user(user)
 
-                try:
-                    from wearables.models import WearableConnection
-                    from wearables.tasks import sync_user_wearables
-
-                    sync_user_wearables.delay(user.id)
-                except Exception as e:
-                    print(f"Background sync error: {e}")
-
-                refresh = RefreshToken.for_user(user)
-
                 response = JsonResponse({
                     "success": True,
                     "user": {
