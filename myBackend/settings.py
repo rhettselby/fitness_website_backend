@@ -258,3 +258,25 @@ SIMPLE_JWT = {
     'AUTH_COOKIE_HTTP_ONLY': True,  # Not accessible via JavaScript
     'AUTH_COOKIE_SAMESITE': 'None', # Allow cross-site
 }
+
+
+
+###CELERY
+from celery.schedules import crontab
+
+
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
+CELERY_BEAT_SCHEDULE = {
+    'sync-wearables-every-6-hours': {
+        'task': 'wearables.tasks.sync_all_wearables',
+        'schedule': crontab(hour='*/1'),  # Run every 6 hours
+    },
+}
+
+
