@@ -273,7 +273,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
 CELERY_BEAT_SCHEDULE = {
-    'sync-wearables-every-6-hours': {
+    'sync-wearables-every-hour': {
         'task': 'wearables.tasks.sync_all_wearables',
         'schedule': crontab(hour='*/1'),  # Run every 6 hours
     },
