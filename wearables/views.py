@@ -599,27 +599,23 @@ def sync_whoop_for_user(user, days_back=30):
     if connection.expires_at and timezone.now() >= connection.expires_at:
         print(f"Refreshing expired Whoop token for user {user.id}")
         
-        import base64
-        # Create Basic Auth header
-        credentials = f"{WHOOP_CLIENT_ID}:{WHOOP_CLIENT_SECRET}"
-        b64_credentials = base64.b64encode(credentials.encode()).decode()
-        
         token_response = requests.post(
             'https://api.prod.whoop.com/oauth/oauth2/token',
             headers={
-                'Authorization': f'Basic {b64_credentials}',
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
             data={
                 'grant_type': 'refresh_token',
                 'refresh_token': connection.refresh_token,
+                'client_id': WHOOP_CLIENT_ID,
+                'client_secret': WHOOP_CLIENT_SECRET,
             }
         )
         
         if token_response.status_code == 200:
             token_data = token_response.json()
             connection.access_token = token_data['access_token']
-            connection.refresh_token = token_data['refresh_token']
+            connection.refresh_token = token_data.get('refresh_token', connection.refresh_token)
             connection.expires_at = timezone.now() + timedelta(seconds=token_data['expires_in'])
             connection.save()
             print(f"Whoop token refreshed successfully for user {user.id}")
@@ -669,6 +665,8 @@ def sync_whoop_for_user(user, days_back=30):
     connection.save()
     
     return {"success": True, "workouts_added": workouts_added}
+
+
 @csrf_exempt
 def sync_whoop(request):
     user = get_user_from_token(request)
