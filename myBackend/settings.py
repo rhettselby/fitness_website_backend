@@ -93,30 +93,28 @@ WSGI_APPLICATION = 'myBackend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Database Configuration for Railway
-# Replace your existing database section with this:
-
 import dj_database_url
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if DATABASE_URL:
-    # Production (Railway / Supabase)
+    #railway
     DATABASES = {
-        "default": dj_database_url.parse(
-            DATABASE_URL,
-            conn_max_age=0,      # Supabase + pgBouncer
-            ssl_require=False,    # Supabase requires SSL
+        "default": dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
         )
     }
 else:
-    # Local development
+    # Local
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
+
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
