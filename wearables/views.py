@@ -195,6 +195,9 @@ def sync_oura_for_user(user, days_back=7):
 
         duration_seconds = workout.get('duration', 0)
 
+        if duration_minutes < 25:
+            continue
+
         if not duration_seconds:
             start = workout.get('start_datetime')
             end = workout.get('end_datetime')
