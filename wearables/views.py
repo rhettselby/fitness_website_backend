@@ -584,7 +584,7 @@ def strava_disconnect(request):
     ################WHOOP###################################
 
 ####Automatic Adding Workouts ###
-def sync_whoop_for_user(user,days_back=30):
+def sync_whoop_for_user(user, days_back=30):
     """Helper function to sync Whoop data for a specific user"""
     try:
         connection = WearableConnection.objects.get(
@@ -598,13 +598,21 @@ def sync_whoop_for_user(user,days_back=30):
     # REFRESH TOKEN IF EXPIRED
     if connection.expires_at and timezone.now() >= connection.expires_at:
         print(f"Refreshing expired Whoop token for user {user.id}")
+        
+        import base64
+        # Create Basic Auth header
+        credentials = f"{WHOOP_CLIENT_ID}:{WHOOP_CLIENT_SECRET}"
+        b64_credentials = base64.b64encode(credentials.encode()).decode()
+        
         token_response = requests.post(
             'https://api.prod.whoop.com/oauth/oauth2/token',
+            headers={
+                'Authorization': f'Basic {b64_credentials}',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
             data={
                 'grant_type': 'refresh_token',
                 'refresh_token': connection.refresh_token,
-                'client_id': WHOOP_CLIENT_ID,
-                'client_secret': WHOOP_CLIENT_SECRET,
             }
         )
         
@@ -661,7 +669,6 @@ def sync_whoop_for_user(user,days_back=30):
     connection.save()
     
     return {"success": True, "workouts_added": workouts_added}
-
 @csrf_exempt
 def sync_whoop(request):
     user = get_user_from_token(request)
