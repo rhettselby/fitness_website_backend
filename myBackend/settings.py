@@ -106,7 +106,7 @@ if DATABASE_URL:
         "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=0,      # Supabase + pgBouncer
-            ssl_require=True,    # Supabase requires SSL
+            ssl_require=False,    # Supabase requires SSL
         )
     }
 else:
