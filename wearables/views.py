@@ -885,3 +885,35 @@ def whoop_disconnect(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 
+
+###Check Connection Status Functino 
+
+@csrf_exempt
+def check_connection_status(request):
+    """Check which wearables the user has connected"""
+    user = get_user_from_token(request)
+    
+    if not user:
+        return JsonResponse({'error': 'Authentication Required'}, status=401)
+    
+    connections = WearableConnection.objects.filter(
+        user=user,
+        is_active=True
+    )
+    
+    status = {
+        'oura': False,
+        'strava': False,
+        'whoop': False,
+        'connections': []
+    }
+    
+    for connection in connections:
+        status[connection.device_type] = True
+        status['connections'].append({
+            'provider': connection.device_type,
+            'connected_at': connection.created_at,
+            'last_sync': connection.last_sync
+        })
+    
+    return JsonResponse(status)
