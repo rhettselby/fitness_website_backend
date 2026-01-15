@@ -16,7 +16,6 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 import secrets
-from celery import shared_task
 
 
 OURA_CLIENT_ID = os.environ.get('OURA_CLIENT_ID')
@@ -886,81 +885,3 @@ def whoop_disconnect(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 
-######CHECK CONNECTION#######
-
-@csrf_exempt
-def check_connection_status(request):
-    user = get_user_from_token(request)
-    
-    if not user:
-        return JsonResponse({'error': 'Authentication Required'}, status=401)
-    
-    # Check which devices are connected
-    oura_connected = WearableConnection.objects.filter(
-        user=user,
-        device_type='oura',
-        is_active=True
-    ).exists()
-    
-    strava_connected = WearableConnection.objects.filter(
-        user=user,
-        device_type='strava',
-        is_active=True
-    ).exists()
-    
-    whoop_connected = WearableConnection.objects.filter(
-        user=user,
-        device_type='whoop',
-        is_active=True
-    ).exists()
-    
-    return JsonResponse({
-        'oura': oura_connected,
-        'strava': strava_connected,
-        'whoop': whoop_connected,
-    })
-
-
-######CELERY CRON JOB###
-
-
-@shared_task
-def sync_user_wearables(user_id):
-    try:
-        user = User.objects.get(id=user_id)
-        
-        # Sync Oura
-        oura_connection = WearableConnection.objects.filter(
-            user=user, 
-            device_type='oura', 
-            is_active=True
-        ).first()
-        
-        if oura_connection:
-            from .views import sync_oura_for_user
-            sync_oura_for_user(user, days_back=7)
-        
-        # Sync Whoop
-        whoop_connection = WearableConnection.objects.filter(
-            user=user, 
-            device_type='whoop', 
-            is_active=True
-        ).first()
-        
-        if whoop_connection:
-            from .views import sync_whoop_for_user
-            sync_whoop_for_user(user, days_back=7)
-    
-    except Exception as e:
-        print(f"Sync error for user {user_id}: {e}")
-
-@shared_task
-def sync_all_wearables():
-    """Sync wearables for all connected users"""
-    connections = WearableConnection.objects.filter(
-        device_type__in=['oura', 'whoop'], 
-        is_active=True
-    )
-    
-    for connection in connections:
-        sync_user_wearables.delay(connection.user.id)
