@@ -135,6 +135,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
+import os
+os.environ['DJANGO_USE_DEPRECATED_PYTZ'] = 'true'
+
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'

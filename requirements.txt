@@ -15,5 +15,5 @@ whitenoise==6.11.0
 requests==2.31.0
 celery==5.6.2
 redis==7.1.0
-django-celery-beat
-pytz
+django-celery-beat==2.5.0
+pytz==2024.1
