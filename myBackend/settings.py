@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'wearables',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -273,11 +274,5 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
-CELERY_BEAT_SCHEDULE = {
-    'sync-wearables-every-hour': {
-        'task': 'wearables.tasks.sync_all_wearables',
-        'schedule': crontab(hour='*/1'),  #runs every hour
-    },
-}
-
+CCELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
