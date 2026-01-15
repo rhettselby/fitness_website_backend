@@ -274,5 +274,11 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
-CCELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
+CELERY_BEAT_SCHEDULE = {
+    'sync-wearables-every-hour': {
+        'task': 'wearables.tasks.sync_all_wearables',
+        'schedule': crontab(hour='*/1'),
+    },
+}
