@@ -168,7 +168,7 @@ def sync_oura_for_user(user, days_back=7):
             print(f"Failed to refresh Oura token: {token_response.status_code} - {token_response.text}")
             raise Exception("Failed to refresh Oura token")
     
-    end_date = timezone.now().date()
+    end_date = (timezone.now() + timedelta(days=1)).date()
     start_date = end_date - timedelta(days=days_back)
     
     print(f"Syncing Oura for user {user.id} from {start_date} to {end_date}")
@@ -304,7 +304,7 @@ def create_webhook_subscription(user_access_token):
         json={
             'callback_url': webhook_url,
             'verification_token': OURA_WEBHOOK_SECRET,
-            'event_type': 'workout.create',  # Specify exact event type
+            'event_type': 'workout.created',  # Specify exact event type
             'data_type': 'workout',
         }
     )
