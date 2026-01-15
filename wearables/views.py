@@ -195,8 +195,7 @@ def sync_oura_for_user(user, days_back=7):
 
         duration_seconds = workout.get('duration', 0)
 
-        if duration_minutes < 25:
-            continue
+       
 
         if not duration_seconds:
             start = workout.get('start_datetime')
@@ -213,6 +212,9 @@ def sync_oura_for_user(user, days_back=7):
         else:
             duration_minutes = max(duration_seconds // 60, 1)
     
+        if duration_minutes < 25:
+            continue
+
         _, created = Cardio.objects.get_or_create(
             user=user,
             external_id=f"oura_{oura_workout_id}",
