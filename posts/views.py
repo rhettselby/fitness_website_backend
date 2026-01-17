@@ -112,7 +112,7 @@ def recent_workouts_api(request):
                 'type': 'gym',
                 'activity': workout.activity,
                 'date': workout.date.isoformat(),
-                'duration': None,  # Gym workouts don't have duration
+                'duration': None,  #Gym workouts don't have a duration
                 'username': workout.user.username,
             })
         

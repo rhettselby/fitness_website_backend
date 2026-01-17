@@ -215,6 +215,27 @@ def sync_oura_for_user(user, days_back=7):
         if duration_minutes < 25:
             continue
 
+
+        ###Logic to prevent duplicate workouts with same start time (different workout id's)
+        start_datetime = workout.get('start_datetime')
+        
+        existing_workout = Cardio.objects.filter(
+            user=user,
+            date=start_datetime
+            ).first()
+
+        if existing_workout:
+            #if new workout is longer, update existing workout
+            if duration_minutes > existing_workout.duration:
+                existing_workout.duration = duration_minutes
+                existing_workout.activity = f"Oura: {activity_type}"
+                existing_workout.external_id = f"oura_{oura_workout_id}"
+                existing_workout.save()
+                print(f"Updated workout to longer duration: {duration_minutes} min")
+        else:
+            print(f"Skipping shorter duplicate workout")
+            continue
+
         _, created = Cardio.objects.get_or_create(
             user=user,
             external_id=f"oura_{oura_workout_id}",
