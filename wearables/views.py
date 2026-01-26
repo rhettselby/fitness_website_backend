@@ -232,9 +232,10 @@ def sync_oura_for_user(user, days_back=7):
                 existing_workout.external_id = f"oura_{oura_workout_id}"
                 existing_workout.save()
                 print(f"Updated workout to longer duration: {duration_minutes} min")
-        else:
-            print(f"Skipping shorter duplicate workout")
-            continue
+            else:
+                print(f"Skipping shorter duplicate workout")
+                continue
+            
 
         _, created = Cardio.objects.get_or_create(
             user=user,
@@ -506,6 +507,7 @@ def sync_strava_for_user(user, days_back=30):
                 'duration': activity.get('moving_time', 0) // 60
             }
         )
+        
         if created:
             workouts_added += 1
 

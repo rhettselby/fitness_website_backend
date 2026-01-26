@@ -272,6 +272,45 @@ def add_comment(request, workout_type, workout_id):
         return render(request, 'fitness/details.html', context )
     
 
+
+@csrf_exempt
+def add_comment_api_jwt(request):
+
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Only Post Allowed"}, status=405)
+    
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
+    
+    form = CommentForm(request.POST)
+    if form.is_valid():
+        obj = form.save(commit=False)
+        obj.user = user
+        obj.save()
+        
+        return JsonResponse({
+            "success": True,
+            "comment": {
+                "id": obj.id,
+                "user": {
+                    "id": obj.user_id,
+                    "username": obj.user.username,
+                },
+                "content_type": obj.content_type,
+                "text": obj.text,
+                "workout": obj.workout,
+                "created_at": obj.created_at.isoformat(),
+            },
+            "message": "Cardio workout added successfully"
+        }, status=201)
+    
+    return JsonResponse(
+        {"success": False, "errors": form.errors},
+        status=400
+    )
+    
+
 @login_required(login_url = "/users/login/") #check what the @ does
 def add_like(request, workout_type, workout_id):
     if workout_type == 'cardio':
