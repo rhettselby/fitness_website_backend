@@ -1,3 +1,4 @@
+import json
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from .models import Cardio, Gym, Comment, Like
@@ -283,32 +284,92 @@ def add_comment_api_jwt(request):
     if not user:
         return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
     
-    form = CommentForm(request.POST)
-    if form.is_valid():
-        obj = form.save(commit=False)
-        obj.user = user
-        obj.save()
+    try:
+        data=json.loads(request.body)
+        workout_id = data.get('workout_id')
+        workout_type = data.get('workout_type')
+        comment_text = data.get('text')
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status = 400)
         
+    if not all([workout_id, workout_type, comment_text]):
+        return JsonResponse({"success": False, "error": "Missing required fields"}, status = 400)
+
+
+    if workout_type == 'cardio':
+        model = Cardio
+    elif workout_type == 'gym':
+        model = Gym
+    else:
+        return JsonResponse({"success": False, "error": "Invalid workout type"}, status = 400)
+
+    try: 
+
+        if len(comment_text) > 200:
+            return JsonResponse({"success": False, "error": "Comment too long"}, status=400)
+        
+        workout = get_object_or_404(model, pk=workout_id)
+        ct = ContentType.objects.get_for_model(workout)
+        comment = Comment.objects.create(
+            user=user,
+            text=comment_text,
+            content_type=ct,
+            object_id=workout_id,
+        )
+    
         return JsonResponse({
             "success": True,
             "comment": {
-                "id": obj.id,
+                "id": comment.id,
                 "user": {
-                    "id": obj.user_id,
-                    "username": obj.user.username,
+                    "username": comment.user.username,
                 },
-                "content_type": obj.content_type,
-                "text": obj.text,
-                "workout": obj.workout,
-                "created_at": obj.created_at.isoformat(),
+                "text": comment.text,
+                "created_at": comment.created_at.isoformat(),
             },
-            "message": "Cardio workout added successfully"
+            "message": "Comment added successfully"
         }, status=201)
     
-    return JsonResponse(
-        {"success": False, "errors": form.errors},
-        status=400
-    )
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status = 500)
+    
+
+def get_comments_api(request, workout_type, workout_id):
+    if workout_type == 'cardio':
+        model = Cardio
+    elif workout_type == 'gym':
+        model = Gym
+    else:
+        return JsonResponse({"success": False, "error": "Invalid workout type"}, status=400)
+
+    try:
+        workout = get_object_or_404(model, pk=workout_id)
+        ct = ContentType.objects.get_for_model(workout)
+        
+        comments = Comment.objects.filter(
+            content_type=ct, 
+            object_id=workout.id
+        ).order_by('-created_at')
+        
+        comments_data = [{
+            "id": comment.id,
+            "user": {
+                "username": comment.user.username
+            },
+            "text": comment.text,
+            "created_at": comment.created_at.isoformat()
+        } for comment in comments]
+        
+        return JsonResponse({
+            "success": True, 
+            "comments": comments_data
+        })
+    
+    except Exception as e:
+        return JsonResponse({
+            "success": False, 
+            "error": str(e)
+        }, status=500)
     
 
 @login_required(login_url = "/users/login/") #check what the @ does
