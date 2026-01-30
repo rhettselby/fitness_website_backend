@@ -232,6 +232,7 @@ def sync_oura_for_user(user, days_back=7):
                 existing_workout.external_id = f"oura_{oura_workout_id}"
                 existing_workout.save()
                 print(f"Updated workout to longer duration: {duration_minutes} min")
+                continue
             else:
                 print(f"Skipping shorter duplicate workout")
                 continue
@@ -493,18 +494,69 @@ def sync_strava_for_user(user, days_back=30):
     activities = response.json()
     workouts_added = 0
 
+
+
     for activity in activities:
         activity_type = activity.get('type', 'Unknown Activity')
         activity_date = activity.get('start_date')
         strava_activity_id = str(activity.get('id'))
+
+
+
+
+
+        duration_seconds = activity.get('moving_time', 0)
+
+       
+
+        if not duration_seconds:
+            start = activity.get('start_date')
+            end = activity.get('end_date')
+
+            if start and end:
+                start_dt = parse_datetime(start)
+                end_dt = parse_datetime(end)
+                duration_seconds = int((end_dt - start_dt).total_seconds())
+            else:
+                duration_seconds = 0
+
+            duration_minutes = max(duration_seconds // 60, 1)
+        else:
+            duration_minutes = max(duration_seconds // 60, 1)
+    
+        if duration_minutes < 25:
+            continue
+
+
+
+         ###Logic to prevent duplicate workouts with same start time (different workout id's)
+        start_datetime = activity.get('start_date')
+        
+        existing_workout = Cardio.objects.filter(
+            user=user,
+            date=start_datetime
+            ).first()
+
+        if existing_workout:
+            #if new workout is longer, update existing workout
+            if duration_minutes > existing_workout.duration:
+                existing_workout.duration = duration_minutes
+                existing_workout.activity = f"Strava: {activity_type}"
+                existing_workout.external_id = f"Strava_{strava_activity_id}"
+                existing_workout.save()
+                print(f"Updated workout to longer duration: {duration_minutes} min")
+                continue
+            else:
+                print(f"Skipping shorter duplicate workout")
+                continue
     
         _, created = Cardio.objects.get_or_create(
             user=user,
-            external_id=f"strava_{strava_activity_id}",
+            external_id=f"Strava_{strava_activity_id}",
             defaults={
                 'activity': f"Strava: {activity_type}",
                 'date': activity_date,
-                'duration': activity.get('moving_time', 0) // 60
+                'duration': duration_minutes
             }
         )
         
