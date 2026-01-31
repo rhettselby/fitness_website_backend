@@ -33,6 +33,11 @@ WHOOP_CLIENT_ID = os.environ.get('WHOOP_CLIENT_ID')
 WHOOP_CLIENT_SECRET = os.environ.get('WHOOP_CLIENT_SECRET')
 WHOOP_REDIRECT_URI = 'https://fitnesswebsitebackend-production.up.railway.app/api/wearables/whoop/callback/'
 
+
+
+def workouts_overlap(workout1_start, workout1_end, workout2_start, workout2_end):
+    return not (workout1_end <= workout2_start or workout2_end <= workout1_start)
+
 #Helper Function
 def get_user_from_token(request):
     
@@ -216,7 +221,7 @@ def sync_oura_for_user(user, days_back=7):
             continue
 
 
-        ###Logic to prevent duplicate workouts with same start time (different workout id's)
+       ###DUPLICATE START TIME CHECK
         start_datetime = workout.get('start_datetime')
         
         existing_workout = Cardio.objects.filter(
@@ -238,6 +243,41 @@ def sync_oura_for_user(user, days_back=7):
                 print(f"Skipping shorter duplicate workout")
                 continue
 
+
+        ### WORKOUTS OVERLAP CHECK
+        start_dt = parse_datetime(start_datetime)
+        try:
+            end_dt = parse_datetime(workout.get('end_datetime')) if workout.get('end_datetime') else start_dt + timedelta(minutes=duration_minutes)
+
+            overlapping_workouts = Cardio.objects.filter(
+                user=user,
+                date__gte=start_dt - timedelta(hours=1),  # broad initial filter
+                date__lte=end_dt + timedelta(hours=1)
+            )
+
+            is_overlapping = False
+            for existing in overlapping_workouts:
+                current = any(
+                    workouts_overlap(
+                        start_dt, 
+                        end_dt, 
+                        parse_datetime(existing.date), 
+                        parse_datetime(existing.date) + timedelta(minutes=existing.duration)
+                    )
+                )
+                if current:
+                    is_overlapping = True
+            
+            if is_overlapping:
+                print(f"Skipping overlapping workout: {activity_type} at {start_dt}")
+                continue
+
+
+        except Exception as e:
+            print(f"Error checking workout overlap: {e}")
+            continue
+
+        ###DUPLICATE WORKOUT ID CHECK
         existing_external_workout = Cardio.objects.filter(
             user=user,
             external_id=f"oura_{oura_workout_id}"
