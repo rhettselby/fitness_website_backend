@@ -33,11 +33,6 @@ WHOOP_CLIENT_ID = os.environ.get('WHOOP_CLIENT_ID')
 WHOOP_CLIENT_SECRET = os.environ.get('WHOOP_CLIENT_SECRET')
 WHOOP_REDIRECT_URI = 'https://fitnesswebsitebackend-production.up.railway.app/api/wearables/whoop/callback/'
 
-
-
-def workouts_overlap(workout1_start, workout1_end, workout2_start, workout2_end):
-    return not (workout1_end <= workout2_start or workout2_end <= workout1_start)
-
 #Helper Function
 def get_user_from_token(request):
     
@@ -198,19 +193,6 @@ def sync_oura_for_user(user, days_back=7):
         activity_type = workout.get('activity', 'Unknown Activity')
         oura_workout_id = str(workout.get('id'))
 
-        _, created = Cardio.objects.get_or_create(
-            user=user,
-            external_id=f"oura_{oura_workout_id}",
-            defaults={
-                'activity': f"Oura: {activity_type}",
-                'date': workout.get('start_datetime'),
-                'duration': max(workout.get('duration', 0) // 60, 1)
-            }
-        )
-
-        if not created:
-            continue
-
         duration_seconds = workout.get('duration', 0)
 
        
@@ -234,14 +216,13 @@ def sync_oura_for_user(user, days_back=7):
             continue
 
 
-       ###DUPLICATE START TIME CHECK
+        ###Logic to prevent duplicate workouts with same start time (different workout id's)
         start_datetime = workout.get('start_datetime')
         
         existing_workout = Cardio.objects.filter(
             user=user,
-            date__gte=start_datetime - timedelta(minutes=5),
-            date__lte=start_datetime + timedelta(minutes=5)
-                ).first()
+            date=start_datetime
+            ).first()
 
         if existing_workout:
             #if new workout is longer, update existing workout
@@ -255,44 +236,25 @@ def sync_oura_for_user(user, days_back=7):
             else:
                 print(f"Skipping shorter duplicate workout")
                 continue
-
-
-        ### WORKOUTS OVERLAP CHECK
-        start_dt = parse_datetime(start_datetime)
-        try:
-            end_dt = parse_datetime(workout.get('end_datetime')) if workout.get('end_datetime') else start_dt + timedelta(minutes=duration_minutes)
-
-            overlapping_workouts = Cardio.objects.filter(
-                user=user,
-                date__gte=start_dt - timedelta(hours=1),  # broad initial filter
-                date__lte=end_dt + timedelta(hours=1)
-            )
-
-            is_overlapping = any(
-                workouts_overlap(
-                    start_dt, 
-                    end_dt, 
-                        parse_datetime(existing.date), 
-                        parse_datetime(existing.date) + timedelta(minutes=existing.duration)
-                    )
-                for existing in overlapping_workouts
-            )
             
-            if is_overlapping:
-                print(f"Skipping overlapping workout: {activity_type} at {start_dt}")
-                continue
 
+        _, created = Cardio.objects.get_or_create(
+            user=user,
+            external_id=f"oura_{oura_workout_id}",
+            defaults={
+                'activity': f"Oura: {activity_type}",
+                'date': workout.get('start_datetime'),
+                'duration': duration_minutes
+            }
+        )
+        if created: 
+            workouts_added += 1
 
-        except Exception as e:
-            print(f"Error checking workout overlap: {e}")
-            continue
-
+    connection.last_sync = timezone.now()
+    connection.save()
 
     print(f"Oura sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
-
-
-
 #Oura Webhook function
 
 @csrf_exempt
@@ -579,8 +541,8 @@ def sync_strava_for_user(user, days_back=30):
             #if new workout is longer, update existing workout
             if duration_minutes > existing_workout.duration:
                 existing_workout.duration = duration_minutes
-                existing_workout.activity = f"strava: {activity_type}"
-                existing_workout.external_id = f"strava_{strava_activity_id}"
+                existing_workout.activity = f"Strava: {activity_type}"
+                existing_workout.external_id = f"Strava_{strava_activity_id}"
                 existing_workout.save()
                 print(f"Updated workout to longer duration: {duration_minutes} min")
                 continue
@@ -590,9 +552,9 @@ def sync_strava_for_user(user, days_back=30):
     
         _, created = Cardio.objects.get_or_create(
             user=user,
-            external_id=f"strava_{strava_activity_id}",
+            external_id=f"Strava_{strava_activity_id}",
             defaults={
-                'activity': f"strava: {activity_type}",
+                'activity': f"Strava: {activity_type}",
                 'date': activity_date,
                 'duration': duration_minutes
             }
