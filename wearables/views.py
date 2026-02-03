@@ -198,6 +198,19 @@ def sync_oura_for_user(user, days_back=7):
         activity_type = workout.get('activity', 'Unknown Activity')
         oura_workout_id = str(workout.get('id'))
 
+        _, created = Cardio.objects.get_or_create(
+            user=user,
+            external_id=f"oura_{oura_workout_id}",
+            defaults={
+                'activity': f"Oura: {activity_type}",
+                'date': workout.get('start_datetime'),
+                'duration': max(workout.get('duration', 0) // 60, 1)
+            }
+        )
+
+        if not created:
+            continue
+
         duration_seconds = workout.get('duration', 0)
 
        
@@ -255,18 +268,15 @@ def sync_oura_for_user(user, days_back=7):
                 date__lte=end_dt + timedelta(hours=1)
             )
 
-            is_overlapping = False
-            for existing in overlapping_workouts:
-                current = any(
-                    workouts_overlap(
-                        start_dt, 
-                        end_dt, 
+            is_overlapping = any(
+                workouts_overlap(
+                    start_dt, 
+                    end_dt, 
                         parse_datetime(existing.date), 
                         parse_datetime(existing.date) + timedelta(minutes=existing.duration)
                     )
-                )
-                if current:
-                    is_overlapping = True
+                for existing in overlapping_workouts
+            )
             
             if is_overlapping:
                 print(f"Skipping overlapping workout: {activity_type} at {start_dt}")
@@ -277,28 +287,12 @@ def sync_oura_for_user(user, days_back=7):
             print(f"Error checking workout overlap: {e}")
             continue
 
-        ###DUPLICATE WORKOUT ID CHECK
-        existing_external_workout = Cardio.objects.filter(
-            user=user,
-            external_id=f"oura_{oura_workout_id}"
-            ).exists()
-
-
-        if not existing_external_workout:
-            Cardio.objects.create(
-            user=user,
-            external_id=f"oura_{oura_workout_id}",
-            activity=f"Oura: {activity_type}",
-            date=start_datetime,
-            duration=duration_minutes
-            )
-            workouts_added += 1
-
-    connection.last_sync = timezone.now()
-    connection.save()
 
     print(f"Oura sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
+
+
+
 #Oura Webhook function
 
 @csrf_exempt
