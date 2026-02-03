@@ -215,6 +215,11 @@ def sync_oura_for_user(user, days_back=7):
         if duration_minutes < 25:
             continue
 
+          ## Hiking/Walking <45 min doesnt count as workout ;)
+        if activity_type == 'walking' or activity_type == 'hiking':
+            if duration_minutes < 45:
+                continue
+
 
         ###Logic to prevent duplicate workouts with same start time (different workout id's)
         start_datetime = workout.get('start_datetime')
@@ -527,8 +532,7 @@ def sync_strava_for_user(user, days_back=30):
         if duration_minutes < 25:
             continue
 
-
-
+      
          ###Logic to prevent duplicate workouts with same start time (different workout id's)
         start_datetime = activity.get('start_date')
         
