@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericRelation
 
 # Create your models here.
 
@@ -11,11 +12,19 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 
 class Workout(models.Model):
     date = models.DateTimeField(auto_now_add = True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)  # owner, CASCADE means workouts are deleted if user is deleted
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    comments = GenericRelation('Comment') #Query Set manager that represents a databse relation
+                                            #returns QuerySets, all django query sets have
+                                            # .all() .filter(), .count(), .first(), ...
+    
+      # owner, CASCADE means workouts are deleted if user is deleted
 
     class Meta: # Makes Workout an Abstract Base Class
         abstract = True
     
+    @property
+    def comment_count(self):
+        return self.comments.count()
 
 #cardio class, contains date, type, and duration members
 class Cardio(Workout):

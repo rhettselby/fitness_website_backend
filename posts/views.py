@@ -103,6 +103,7 @@ def recent_workouts_api(request):
                 'date': workout.date.isoformat(),
                 'duration': workout.duration,
                 'username': workout.user.username,
+                'comment_count':workout.comment_count,
             })
         
         # Add gym workouts (duration will be null)
@@ -114,6 +115,7 @@ def recent_workouts_api(request):
                 'date': workout.date.isoformat(),
                 'duration': None,  #Gym workouts don't have a duration
                 'username': workout.user.username,
+                'comment_count': workout.comment_count,
             })
         
         # Sort by date and get top 10
