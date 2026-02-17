@@ -140,6 +140,7 @@ def add_gym_api_jwt(request):
                 },
                 "activity": obj.activity,
                 "date": obj.date.isoformat(),
+                "comment_count": obj.comment_count,
             },
             "message": "Gym workout added successfully"
         }, status = 201)
@@ -185,6 +186,7 @@ def add_cardio_api(request):
             "activity": obj.activity,
             "duration": obj.duration,
             "date": obj.date.isoformat(),
+            "comment_count": obj.comment_count,
 
         },
         "message": "Cardio workout added successfully"},
@@ -225,6 +227,7 @@ def add_cardio_api_jwt(request):
                 "activity": obj.activity,
                 "duration": obj.duration,
                 "date": obj.date.isoformat(),
+                "comment_count": obj.comment_count,
             },
             "message": "Cardio workout added successfully"
         }, status=201)

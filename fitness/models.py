@@ -1,3 +1,4 @@
+from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
@@ -11,8 +12,10 @@ from django.contrib.contenttypes.fields import GenericRelation
 #parent class
 
 class Workout(models.Model):
-    date = models.DateTimeField(auto_now_add = True)
+    date = models.DateTimeField(default=timezone.now)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    #not a model field but a generic relation
     comments = GenericRelation('Comment') #Query Set manager that represents a databse relation
                                             #returns QuerySets, all django query sets have
                                             # .all() .filter(), .count(), .first(), ...

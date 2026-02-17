@@ -256,6 +256,10 @@ def leaderboard_api(request):
 
 ### JWT Authentication Leaderboard Version
 
+from django.utils import timezone
+from zoneinfo import ZoneInfo
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
 @csrf_exempt
 def leaderboard_api_jwt(request):
     if request.method != "GET":
@@ -266,21 +270,22 @@ def leaderboard_api_jwt(request):
         return JsonResponse({"error": "Authentication required"}, status=401)
 
     current_time = now_utc()
-    week_start = beginning_of_week(current_time)
+    current_time_pt = current_time.astimezone(PACIFIC)
+    week_start = beginning_of_week(current_time_pt)
 
-    start_datetime = week_start
-    end_datetime = current_time
+    start_datetime_utc = week_start.astimezone(timezone.utc)
+    end_datetime_utc = current_time_pt.astimezone(timezone.utc) 
 
     cardio_counts = (
         Cardio.objects
-        .filter(date__gte=start_datetime, date__lte=end_datetime)
+        .filter(date__gte=start_datetime_utc, date__lte=end_datetime_utc)
         .values("user")
         .annotate(count=Count("id"))
     )
 
     gym_counts = (
         Gym.objects
-        .filter(date__gte=start_datetime, date__lte=end_datetime)
+        .filter(date__gte=start_datetime_utc, date__lte=end_datetime_utc)
         .values("user")
         .annotate(count=Count("id"))
     )
