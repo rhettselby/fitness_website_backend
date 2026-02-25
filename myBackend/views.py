@@ -1,4 +1,6 @@
 from django.utils import timezone
+import pytz
+from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
 from django.shortcuts import render
@@ -104,17 +106,21 @@ def homepage(request):
 
 @login_required(login_url="/users/login/")
 def leaderboard(request):
-    current_time = now_utc()
-    week_start = beginning_of_week(current_time)
+    
+    pst = pytz.timezone('America/Los_Angeles')
+    current_time = timezone.now().astimezone(pst)
 
-    # Use datetime for filtering since Workout.date is DateTimeField
-    start_datetime = week_start
-    end_datetime = current_time
+    #Create one week zone
+    today = timezone.now().astimezone(pst)
+    start_of_week = today - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=7)
+
+
 
     # 1. Count Cardio workouts this week
     cardio_counts = (
         Cardio.objects
-        .filter(date__gte=start_datetime, date__lte=end_datetime)
+        .filter(date__gte=start_of_week, date__lte=end_of_week)
         .values("user")
         .annotate(count=Count("id"))
     )
@@ -122,7 +128,7 @@ def leaderboard(request):
     # 2. Count Gym workouts this week
     gym_counts = (
         Gym.objects
-        .filter(date__gte=start_datetime, date__lte=end_datetime)
+        .filter(date__gte=start_of_week, date__lte=end_of_week)
         .values("user")
         .annotate(count=Count("id"))
     )
@@ -164,7 +170,7 @@ def leaderboard(request):
 
     context = {
         "leaderboard": leaderboard_rows,
-        "week_start": week_start.date(),
+        "week_start": start_of_week.date(),
         "week_end": current_time.date(),
         "current_user_count": current_user_count,
     }
@@ -269,23 +275,23 @@ def leaderboard_api_jwt(request):
     if not user:
         return JsonResponse({"error": "Authentication required"}, status=401)
 
-    current_time = now_utc()
-    current_time_pt = current_time.astimezone(PACIFIC)
-    week_start = beginning_of_week(current_time_pt)
+    pst = pytz.timezone('America/Los_Angeles')
 
-    start_datetime_utc = week_start.astimezone(timezone.utc)
-    end_datetime_utc = current_time_pt.astimezone(timezone.utc) 
+    #Create one week zone
+    today = timezone.now().astimezone(pst)
+    start_of_week = today.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=today.weekday())
+    end_of_week = start_of_week + timedelta(days=7)
 
     cardio_counts = (
         Cardio.objects
-        .filter(date__gte=start_datetime_utc, date__lte=end_datetime_utc)
+        .filter(date__gte=start_of_week, date__lte=end_of_week)
         .values("user")
         .annotate(count=Count("id"))
     )
 
     gym_counts = (
         Gym.objects
-        .filter(date__gte=start_datetime_utc, date__lte=end_datetime_utc)
+        .filter(date__gte=start_of_week, date__lte=end_of_week)
         .values("user")
         .annotate(count=Count("id"))
     )

@@ -507,12 +507,8 @@ def sync_strava_for_user(user, days_back=30):
         strava_activity_id = str(activity.get('id'))
 
 
-
-
-
         duration_seconds = activity.get('moving_time', 0)
 
-       
 
         if not duration_seconds:
             start = activity.get('start_date')
