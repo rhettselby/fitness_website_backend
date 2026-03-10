@@ -1,4 +1,6 @@
-from venv import logger
+import base64
+import logging
+logger = logging.getLogger(__name__)
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework_simplejwt.tokens import AccessToken
@@ -658,6 +660,29 @@ def strava_disconnect(request):
 
     ################WHOOP###################################
 
+
+##### validate whoop signature (required for webhooks)
+
+def validate_whoop_signature(request):
+    signature = request.headers.get('X-WHOOP-Signature')
+    timestamp = request.headers.get('X-WHOOP-Signature-Timestamp')
+    
+    if not signature or not timestamp:
+        return False
+    
+    message = timestamp + request.body.decode('utf-8')
+    expected = base64.b64encode(
+        hmac.new(
+            WHOOP_CLIENT_SECRET.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).digest()
+    ).decode()
+    
+    return hmac.compare_digest(signature, expected)
+
+
+
 ####Automatic Adding Workouts ###
 def sync_whoop_for_user(user, days_back=30):
     """Helper function to sync Whoop data for a specific user"""
@@ -723,14 +748,25 @@ def sync_whoop_for_user(user, days_back=30):
         sport_name = workout.get('sport_id', 'Unknown Activity')
         whoop_workout_id = str(workout.get('id'))
         workout_start = workout.get('start')
-        
+        workout_end = workout.get('end')
+        if workout_start and workout_end:
+            start_dt = parse_datetime(workout_start)
+            end_dt = parse_datetime(workout_end)
+            duration_minutes = max(int((end_dt - start_dt).total_seconds()) // 60, 1)
+        else:
+            continue
+
+        #skip short workouts
+        if duration_minutes < 10:
+            continue
+
         _, created = Cardio.objects.get_or_create(
             user=user,
             external_id=f"whoop_{whoop_workout_id}",
             defaults={
                 'activity': f"Whoop: {sport_name}",
                 'date': workout_start,
-                'duration': workout.get('score', {}).get('strain', 0)
+                'duration': duration_minutes,
             }
         )
         if created:
@@ -902,6 +938,9 @@ def whoop_webhook(request):
     """Handle incoming Whoop webhook notifications"""
     logger.info("Whoop Webhook Received")
     
+    if not validate_whoop_signature(request):
+        return JsonResponse({'error': 'Invalid Signature'}, status=401)
+
     try:
         data = json.loads(request.body)
         event_type = data.get('type')
