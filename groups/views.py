@@ -1,6 +1,6 @@
 from django.http import JsonResponse
 from groups.models import Group
-from users.models import User
+from users.models import Users
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework.decorators import api_view, permission_classes
@@ -19,8 +19,8 @@ def get_user_from_token(request):
     try:
         access_token = AccessToken(token)
         user_id = access_token["user_id"]
-        return User.objects.get(id=user_id)
-    except (InvalidToken, TokenError, User.DoesNotExist):
+        return Users.objects.get(id=user_id)
+    except (InvalidToken, TokenError, Users.DoesNotExist):
         return None
 
 
