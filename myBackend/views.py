@@ -286,6 +286,7 @@ def leaderboard_api_jwt(request):
         Cardio.objects
         .filter(date__gte=start_of_week, date__lte=end_of_week)
         .values("user")
+        #adds a annotated field to the object (not in database)
         .annotate(count=Count("id"))
     )
 
