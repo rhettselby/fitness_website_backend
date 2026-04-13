@@ -53,6 +53,7 @@ urlpatterns = [
     path('users/', include('users.urls')),  # This already has /api/ paths inside
     path('api/fitness/', include('fitness.urls')),  # This already has /api/ paths inside
     path('api/profile/', include('profile_page.urls')),
+    path('groups/', include('groups.urls'), name = 'groups'),
 
     #JWT Authentication Routes
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
