@@ -40,7 +40,7 @@ def view_groups(request):
         group_names = []
 
         for group in groups:
-            group_names.append(group.name)
+            group_names.append({"name": group.name, "id": group.id})
 
         return JsonResponse({"groups": group_names})
     
