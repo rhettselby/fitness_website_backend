@@ -54,7 +54,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'wearables',
     'django_celery_beat',
-    'fitness_groups',
+    'groups',
 ]
 
 MIDDLEWARE = [
