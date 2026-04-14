@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from groups.models import Group
+from fitness_groups.models import FitnessGroup
 from users.models import Users
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
@@ -64,9 +64,9 @@ def get_leaderboard(request, group_id):
             return JsonResponse({"error": "Authentication Required", }, status=401)
         
         try:
-            group = Group.objects.get(id=group_id)
+            group = FitnessGroup.objects.get(id=group_id)
 
-        except Group.DoesNotExist:
+        except FitnessGroup.DoesNotExist:
             return JsonResponse({"error": "Group not found"}, status = 404)
 
 
@@ -101,8 +101,8 @@ def join_group(request, group_id):
             return JsonResponse({"error": "Authentication Required"}, status=401)
         
         try:
-            group = Group.objects.get(id=group_id)
-        except Group.DoesNotExist:
+            group = FitnessGroup.objects.get(id=group_id)
+        except FitnessGroup.DoesNotExist:
             return JsonResponse({"error": "Group Not Found"}, status = 404)
 
         if user.groups.filter(id=group_id).exists():
@@ -134,7 +134,7 @@ def create_group(request):
         if not chosen_name:
             return JsonResponse({"error": "Name is required"}, status=400)
         
-        group = Group.objects.create(
+        group = FitnessGroup.objects.create(
             name = chosen_name,
             size = 1,
         )
