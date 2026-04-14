@@ -6,6 +6,8 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.models import User
+
 
 
 
@@ -20,7 +22,8 @@ def get_user_from_token(request):
     try:
         access_token = AccessToken(token)
         user_id = access_token["user_id"]
-        return Users.objects.get(id=user_id)
+        #Must be User (django's built in user) not Users (my user model)
+        return User.objects.get(id=user_id)
     except (InvalidToken, TokenError, Users.DoesNotExist):
         return None
 

@@ -14,6 +14,14 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
 
 
+##### Helper function to calculate points for a workout #####
+def points(workout_type:str, workout_duration:int):
+    return None
+
+
+
+
+
 ### Helper function for JWT Authentication
 def get_user_from_token(request):
     auth_header = request.headers.get('Authorization', '')
@@ -397,6 +405,7 @@ def add_like(request, workout_type, workout_id):
 
     
     
+
 
 
 
