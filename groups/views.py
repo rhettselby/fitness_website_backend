@@ -5,6 +5,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from django.views.decorators.csrf import csrf_exempt
 
 
 
@@ -26,7 +27,7 @@ def get_user_from_token(request):
 
 
 
-
+@csrf_exempt
 @api_view(['GET'])
 def view_groups(request):
 
@@ -50,7 +51,7 @@ def view_groups(request):
 
 
 
-
+@csrf_exempt
 @api_view(['GET'])
 def get_leaderboard(request, group_id):
     try:
@@ -88,7 +89,7 @@ def get_leaderboard(request, group_id):
 
 
 
-
+@csrf_exempt
 @api_view(['POST'])
 def join_group(request, group_id):
     try:
@@ -118,7 +119,7 @@ def join_group(request, group_id):
 
 
 
-
+@csrf_exempt
 @api_view(['POST'])
 def create_group(request):
     try:
