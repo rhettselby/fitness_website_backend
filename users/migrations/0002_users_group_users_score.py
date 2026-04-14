@@ -7,15 +7,15 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('groups', '0001_initial'),
-        ('users', '0001_initial'),
+    ('groups', '0002_rename_group_fitnessgroup'),
+    ('users', '0001_initial'),
     ]
 
     operations = [
         migrations.AddField(
             model_name='users',
             name='group',
-            field=models.ForeignKey(default=None, on_delete=django.db.models.deletion.CASCADE, to='groups.group'),
+            field=models.ForeignKey(default=None, on_delete=django.db.models.deletion.CASCADE, to='groups.fitnessgroup'),
         ),
         migrations.AddField(
             model_name='users',

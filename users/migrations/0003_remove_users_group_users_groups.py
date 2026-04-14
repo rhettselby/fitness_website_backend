@@ -6,9 +6,9 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('groups', '0001_initial'),
-        ('users', '0002_users_group_users_score'),
-    ]
+    ('groups', '0002_rename_group_fitnessgroup'),
+    ('users', '0002_users_group_users_score'),
+]
 
     operations = [
         migrations.RemoveField(
@@ -18,6 +18,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='users',
             name='groups',
-            field=models.ManyToManyField(related_name='members', to='groups.group'),
+            field=models.ManyToManyField(related_name='members', to='groups.fitnessgroup'),
         ),
     ]
