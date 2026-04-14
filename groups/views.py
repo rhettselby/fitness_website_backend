@@ -40,7 +40,7 @@ def view_groups(request):
         if not user:
             return JsonResponse({"error": "Authentication Required"}, status=401)
         
-        groups = user.groups.all()
+        groups = user.fitness_groups.all()
         group_names = []
 
         for group in groups:
@@ -108,7 +108,7 @@ def join_group(request, group_id):
         if user.groups.filter(id=group_id).exists():
             return JsonResponse({"error": "User already in Group"}, status=400)
         #add group to user's ManyToManyField group
-        user.groups.add(group)
+        user.fitness_groups.add(group)
 
         group.score += 1
         group.save()
@@ -139,7 +139,7 @@ def create_group(request):
             size = 1,
         )
 
-        user.groups.add(group)
+        user.fitness_groups.add(group)
 
         return JsonResponse({"message": "Group Created Successfully"}, status=201)
 
