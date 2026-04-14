@@ -7,7 +7,7 @@ class Users (models.Model):
     slug = models.SlugField()
     body = models.TextField()
     score = models.IntegerField(default=0)
-    groups = models.ManyToManyField(FitnessGroup, related_name='members')
+    fitness_groups = models.ManyToManyField(FitnessGroup, related_name='members')
 
     def __str__(self):
         return self.title
