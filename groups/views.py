@@ -40,7 +40,7 @@ def view_groups(request):
         if not user:
             return JsonResponse({"error": "Authentication Required"}, status=401)
         
-        groups = user.fitness_groups.all()
+        groups = user.fitness_group.all()
         group_names = []
 
         for group in groups:
