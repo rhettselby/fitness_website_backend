@@ -107,7 +107,7 @@ def join_group(request, group_id):
         except FitnessGroup.DoesNotExist:
             return JsonResponse({"error": "Group Not Found"}, status = 404)
 
-        if user.fitness_groups.filter(id=group_id).exists():
+        if user.fitness_group.filter(id=group_id).exists():
             return JsonResponse({"error": "User already in Group"}, status=400)
         #add group to user's ManyToManyField group
         group.members.add(user)
