@@ -1,6 +1,5 @@
 from django.http import JsonResponse
 from groups.models import FitnessGroup
-from users.models import Users
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework.decorators import api_view, permission_classes
@@ -22,9 +21,10 @@ def get_user_from_token(request):
     try:
         access_token = AccessToken(token)
         user_id = access_token["user_id"]
-        #Must be User (django's built in user) not Users (my user model)
+        #User is Django's built in User model
         return User.objects.get(id=user_id)
-    except (InvalidToken, TokenError, Users.DoesNotExist):
+    
+    except (InvalidToken, TokenError, User.DoesNotExist):
         return None
 
 
@@ -70,19 +70,21 @@ def get_leaderboard(request, group_id):
             return JsonResponse({"error": "Group not found"}, status = 404)
 
 
-        users = group.members.all()
+        members = group.members.all()
 
         result = {}
-        for user in users:
-            score = user.score
-            result[user.title] = score
+        for member in members:
+            score = member.profile.score
+            result[member.id] = (score, member.username)
         
         #sort by score in descending order
-        sorted_result = list(sorted(result.items(), key=lambda x: x[1], reverse=True))
+        sorted_result = sorted(result.items(), key=lambda x: x[1][0], reverse=True)
         leaderboard = []
         for i in range(len(sorted_result)):
-            username, score = sorted_result[i]
-            leaderboard.append({"rank": i + 1, "user": username, "score": score})
+            user_id, info = sorted_result[i]
+            score = info[0]
+            username = info[1]
+            leaderboard.append({"rank": i + 1, "user": username, "score": score,})
 
         return JsonResponse({"leaderboard": leaderboard})
     
@@ -105,13 +107,10 @@ def join_group(request, group_id):
         except FitnessGroup.DoesNotExist:
             return JsonResponse({"error": "Group Not Found"}, status = 404)
 
-        if user.groups.filter(id=group_id).exists():
+        if user.fitness_groups.filter(id=group_id).exists():
             return JsonResponse({"error": "User already in Group"}, status=400)
         #add group to user's ManyToManyField group
-        user.fitness_groups.add(group)
-
-        group.score += 1
-        group.save()
+        group.members.add(user)
 
         return JsonResponse({"message": "User joined group"}, status=200)
     
@@ -136,10 +135,10 @@ def create_group(request):
         
         group = FitnessGroup.objects.create(
             name = chosen_name,
-            size = 1,
+            owner = user,
         )
 
-        user.fitness_groups.add(group)
+        group.members.add(user)
 
         return JsonResponse({"message": "Group Created Successfully"}, status=201)
 

@@ -10,4 +10,5 @@ class Profile(models.Model):
     bio = models.TextField(blank=True)
     birthday = models.DateField(null = True, blank = True)
     location = models.TextField(null = True, blank = True)
+    score = models.IntegerField(default=0)
  

@@ -6,8 +6,6 @@ class Users (models.Model):
     date = models.DateTimeField(auto_now_add = True)
     slug = models.SlugField()
     body = models.TextField()
-    score = models.IntegerField(default=0)
-    fitness_groups = models.ManyToManyField(FitnessGroup, related_name='members')
 
     def __str__(self):
         return self.title
