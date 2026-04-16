@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 
 
 
-EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking, surf, surfing, soccer, dancing, dance"]
+EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking", "surf", "surfing", "soccer", "dancing", "dance"]
 ##### Helper function to calculate points for a workout #####
 def points(workout_type:str, activity:str, duration:float):
 
@@ -86,12 +86,13 @@ def add_gym_api_jwt(request):
         activity = obj.activity
         duration = 0
 
-        obj.save()
-
         score = points(workout_type, activity, duration)
         user.profile.score += score
-
         user.profile.save()
+
+        #add score to workout object
+        obj.score = score
+        obj.save()
 
         return JsonResponse({
             "success": True,
@@ -104,6 +105,7 @@ def add_gym_api_jwt(request):
                 "activity": obj.activity,
                 "date": obj.date.isoformat(),
                 "comment_count": obj.comment_count,
+                "score": score,
             },
             "message": "Gym workout added successfully"
         }, status = 201)
@@ -136,13 +138,12 @@ def add_cardio_api_jwt(request):
         activity = obj.activity
         duration = obj.duration
 
-        obj.save()
-
         score = points(workout_type, activity, duration)
         user.profile.score += score
-
         user.profile.save()
-        
+
+        obj.score = score
+        obj.save()
         return JsonResponse({
             "success": True,
             "cardio": {
@@ -155,6 +156,7 @@ def add_cardio_api_jwt(request):
                 "duration": obj.duration,
                 "date": obj.date.isoformat(),
                 "comment_count": obj.comment_count,
+                "score":score,
             },
             "message": "Cardio workout added successfully"
         }, status=201)
