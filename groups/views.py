@@ -44,7 +44,7 @@ def view_groups(request):
         group_names = []
 
         for group in groups:
-            group_names.append({"name": group.name, "id": group.id})
+            group_names.append({"name": group.name, "id": group.id, "motto": group.motto})
 
         return JsonResponse({"groups": group_names})
     
@@ -133,9 +133,12 @@ def create_group(request):
         if not chosen_name:
             return JsonResponse({"error": "Name is required"}, status=400)
         
+        motto = request.data.get("motto", None)
+        
         group = FitnessGroup.objects.create(
             name = chosen_name,
             owner = user,
+            motto = motto,
         )
 
         group.members.add(user)
