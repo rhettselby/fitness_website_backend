@@ -14,7 +14,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 class Workout(models.Model):
     date = models.DateTimeField(default=timezone.now)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    score = models.FloatField(default=0)
+    score = models.IntegerField(default=0)
 
     #not a model field but a generic relation
     comments = GenericRelation('Comment') #Query Set manager that represents a databse relation

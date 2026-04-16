@@ -23,8 +23,8 @@ def points(workout_type:str, activity:str, duration:float):
     if workout_type == "cardio":
         if activity.lower() not in EXCLUDED_ACTIVITIES:
             points += duration
-
-    return points
+    integer_points = int(points)
+    return integer_points
 
 
 ### Helper function for JWT Authentication

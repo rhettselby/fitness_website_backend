@@ -68,7 +68,8 @@ def strava_points(activity, duration, speed):
             if mile_minutes < 10:
                 multiplier = (10 - mile_minutes) ** .5
                 score += (multiplier * score)
-    return score
+    integer_score = int(score)
+    return integer_score
 
 def oura_points(activity, duration, intensity):
     score = 100
@@ -80,7 +81,8 @@ def oura_points(activity, duration, intensity):
         elif intensity == "hard":
             score *= 2.5
 
-    return score
+    integer_score = int(score)
+    return integer_score
 
 @csrf_exempt
 def oura_connect(request):
