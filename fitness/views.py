@@ -78,6 +78,10 @@ def add_gym_api_jwt(request):
     
     form = GymForm(request.POST)
 
+    #Retrieve User inputed Exercises
+    body = json.loads(request.body)
+    exercises = body.get('exercises', [])
+
     if form.is_valid():
         obj = form.save(commit=False)
         obj.user = user
@@ -90,8 +94,9 @@ def add_gym_api_jwt(request):
         user.profile.score += score
         user.profile.save()
 
-        #add score to workout object
+        #add score and exercises to workout object
         obj.score = score
+        obj.exercises = exercises
         obj.save()
 
         return JsonResponse({
@@ -106,6 +111,7 @@ def add_gym_api_jwt(request):
                 "date": obj.date.isoformat(),
                 "comment_count": obj.comment_count,
                 "score": score,
+                "exercises": exercises,
             },
             "message": "Gym workout added successfully"
         }, status = 201)

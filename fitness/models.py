@@ -47,6 +47,8 @@ class Cardio(Workout):
 #gym class, contains date and type members
 class Gym(Workout):
     activity = models.CharField(max_length = 75)
+    exercises = models.JSONField(default=list)
+
 
     @property #properties turn a method into an attribute, computed on access
     def model_name(self):
