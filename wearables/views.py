@@ -52,7 +52,35 @@ def get_user_from_token(request):
     except (InvalidToken, TokenError, User.DoesNotExist):
         return None
 
+##### Calculating Points Helper Function #####
+EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking"]
+SPEED_INCLUDED = ["run", "running", "virtualrun", "trailrun"]
+INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strength_training","soccer", "basketball","tennis"]
 
+def strava_points(activity, duration, speed):
+    score = 100
+    if activity.lower() not in EXCLUDED_ACTIVITIES:
+        score += duration
+    
+    if activity.lower() in SPEED_INCLUDED:
+        if speed:
+            mile_minutes = 1609.344 / speed / 60
+            if mile_minutes < 10:
+                multiplier = (10 - mile_minutes) ** .5
+                score += (multiplier * score)
+    return score
+
+def oura_points(activity, duration, intensity):
+    score = 100
+    if activity.lower() not in EXCLUDED_ACTIVITIES:
+        score += duration
+    if activity.lower() in INTENSITY_INCLUDED:
+        if intensity == "moderate":
+            score *= 1.3
+        elif intensity == "hard":
+            score *= 2.5
+
+    return score
 
 @csrf_exempt
 def oura_connect(request):
@@ -245,17 +273,26 @@ def sync_oura_for_user(user, days_back=7):
                 continue
             
 
+        
+        intensity = workout.get('intensity', 'easy')
+
+        score = oura_points(activity_type, duration_minutes, intensity)
+
         _, created = Cardio.objects.get_or_create(
             user=user,
             external_id=f"oura_{oura_workout_id}",
             defaults={
                 'activity': f"Oura: {activity_type}",
                 'date': workout.get('start_datetime'),
-                'duration': duration_minutes
+                'duration': duration_minutes,
+                'score': score
             }
         )
         if created: 
             workouts_added += 1
+            user.profile.score += score
+            user.profile.save()
+            print(f"User {user} logged {score} points.")
 
     connection.last_sync = timezone.now()
     connection.save()
@@ -553,18 +590,26 @@ def sync_strava_for_user(user, days_back=30):
                 print(f"Skipping shorter duplicate workout")
                 continue
     
+        speed = activity.get('average_speed', None)
+        score = strava_points(activity_type, duration_minutes, speed)
+
+
         _, created = Cardio.objects.get_or_create(
             user=user,
             external_id=f"Strava_{strava_activity_id}",
             defaults={
                 'activity': f"Strava: {activity_type}",
                 'date': activity_date,
-                'duration': duration_minutes
+                'duration': duration_minutes,
+                'score': score,
             }
         )
         
         if created:
             workouts_added += 1
+            user.profile.score += score
+            user.profile.save()
+            print(f"User {user} logged {score} points")
 
     connection.last_sync = timezone.now()
     connection.save()
