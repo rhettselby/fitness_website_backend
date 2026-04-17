@@ -23,6 +23,10 @@ def points(workout_type:str, activity:str, duration:float):
     if workout_type == "cardio":
         if activity.lower() not in EXCLUDED_ACTIVITIES:
             points += duration
+
+    elif workout_type == "gym":
+        points = points
+
     integer_points = int(points)
     return integer_points
 
@@ -76,11 +80,13 @@ def add_gym_api_jwt(request):
     if not user:
         return JsonResponse({"success": False, "error": "Authentication Required"}, status = 401)
     
-    form = GymForm(request.POST)
+
 
     #Retrieve User inputed Exercises
     body = json.loads(request.body)
     exercises = body.get('exercises', [])
+
+    form = GymForm(body)
 
     if form.is_valid():
         obj = form.save(commit=False)
