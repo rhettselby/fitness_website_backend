@@ -1,6 +1,8 @@
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 
+from profile_page.models import Profile
+
 from .models import Users
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib.auth import login, logout
@@ -96,6 +98,7 @@ def register_api_jwt(request):
                         return JsonResponse({"success": False, "error": "Username already exists"})
 
                     user = User.objects.create_user(username=username, password=password, email = email)
+                    Profile.objects.create(user=user)
 
                     refresh = RefreshToken.for_user(user)
 
@@ -277,6 +280,7 @@ def register_api(request):
         try:
             user = User.objects.create_user(username=username, password=password, email=email)
             login(request, user)
+            Profile.objects.create(user=user)
             response = JsonResponse({
                 "success": True,
                 "user": {"id": user.id, "username": user.username},
