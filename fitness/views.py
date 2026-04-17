@@ -141,7 +141,9 @@ def add_cardio_api_jwt(request):
     if not user:
         return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
     
-    form = CardioForm(request.POST)
+    body = json.loads(request.body)
+    form = CardioForm(body)
+
     if form.is_valid():
         obj = form.save(commit=False)
         obj.user = user
