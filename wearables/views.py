@@ -63,7 +63,7 @@ def strava_points(activity, duration, speed):
         score += duration
     
     if activity.lower() in SPEED_INCLUDED:
-        if speed:
+        if speed and duration > 10:
             mile_minutes = 1609.344 / speed / 60
             if mile_minutes < 10:
                 multiplier = (10 - mile_minutes) ** .5
