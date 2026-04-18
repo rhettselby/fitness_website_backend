@@ -80,7 +80,7 @@ class Sport(Workout):
 
     CHOICES = [("recreational", "Recreational"),("competitive", "Competitive")]
 
-    level = models.CharField(blank=True, choices = CHOICES, default="recreational")
+    level = models.CharField(max_length = 75, blank=True, choices = CHOICES, default="recreational")
     external_id = models.CharField(max_length=100, null=True, blank=True)
 
 class Booze(Workout):
