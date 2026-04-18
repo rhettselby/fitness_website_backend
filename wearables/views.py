@@ -567,8 +567,8 @@ def sync_strava_for_user(user, days_back=30):
             duration_minutes = max(duration_seconds // 60, 1)
     
         #Disabled minimum duration threshold due to popular demand
-        #if duration_minutes < 25:
-            #continue
+        if duration_minutes < 10:
+            continue
 
       
          ###Logic to prevent duplicate workouts with same start time (different workout id's)
