@@ -2,7 +2,7 @@ from datetime import date
 import json
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
-from fitness.models import Cardio, Gym
+from fitness.models import Booze, Cardio, Gym, Sport
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from . import forms
@@ -95,6 +95,28 @@ def viewpage_api(request):
     return response
 
 
+def get_activity_name(w):
+    if isinstance(w, Sport):
+        return w.sport
+    elif isinstance(w, Booze):
+        return f"{w.number_of_drinks} drinks"
+    else:
+        return w.activity
+
+
+def get_workout_type(w):
+    if isinstance(w, Cardio):
+        return "cardio"
+    elif isinstance(w, Sport):
+        return "sport"
+    elif isinstance(w, Gym):
+        return "gym"
+    elif isinstance(w, Booze):
+        return "booze"
+    else:
+        return "unknown"
+
+
 ### JWT Authentication
 
 @csrf_exempt
@@ -108,20 +130,22 @@ def viewpage_api_jwt(request):
 
     cardio = Cardio.objects.filter(user=user).order_by("-date")
     gym = Gym.objects.filter(user=user).order_by("-date")
+    sport = Sport.objects.filter(user=user).order_by("-date")
+    booze = Booze.objects.filter(user=user).order_by("-date")
 
-    workout_list = list(cardio) + list(gym)
+    workout_list = list(cardio) + list(gym) + list(sport) + list(booze)
     workout_list.sort(key=lambda w: w.date, reverse=True)
 
     workouts = [
-        {
-            "id": w.id,
-            "type": "cardio" if isinstance(w, Cardio) else "gym",
-            "activity": w.activity,
-            "date": w.date.isoformat(),
-            "duration": w.duration if isinstance(w, Cardio) else None,
-        }
-        for w in workout_list
-    ]
+    {
+        "id": w.id,
+        "type": get_workout_type(w),
+        "activity": get_activity_name(w),
+        "date": w.date.isoformat(),
+        "duration": w.duration if not isinstance(w, Gym) else None,
+    }
+    for w in workout_list
+]
 
     try:
         profile = Profile.objects.get(user=user)

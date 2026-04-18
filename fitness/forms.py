@@ -20,6 +20,22 @@ class CardioForm(forms.ModelForm):
             'date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
 
+class SportForm(forms.ModelForm):
+    class Meta:
+        model = models.Sport
+        fields = ['sport', 'duration', 'level']
+        widgets = {
+            'date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
+        }
+
+class BoozeForm(forms.ModelForm):
+    class Meta:
+        model = models.Booze
+        fields = ['number_of_drinks', 'drinks']
+        widgets = {
+            'date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
+        }
+
 
 
 class CommentForm(forms.ModelForm):

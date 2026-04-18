@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect
 from .models import Cardio, Gym, Comment, Like
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
-from .forms import GymForm, CardioForm, CommentForm
+from .forms import BoozeForm, GymForm, CardioForm, CommentForm, SportForm
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 from django.shortcuts import get_object_or_404 #attemps to get an object, if it cant, then it raises an http 404 instead of server crashing
@@ -23,9 +23,18 @@ def points(workout_type:str, activity:str, duration:float):
     if workout_type == "cardio":
         if activity.lower() not in EXCLUDED_ACTIVITIES:
             points += duration
+        else:
+            points // 2
 
     elif workout_type == "gym":
         points = points
+    
+    elif workout_type == "sport":
+        points = 50
+    
+    elif workout_type == "booze":
+        points = 20
+        points += (2 * duration)
 
     integer_points = int(points)
     return integer_points
@@ -180,6 +189,106 @@ def add_cardio_api_jwt(request):
         status=400
     )
 
+
+@csrf_exempt
+def add_sport(request):
+    if request.method != "POST":
+        return JsonResponse ({ "success": False, "error": "Only Post Allowed"}, status = 405)
+
+    #getting user from JWT Token
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
+    
+    body = json.loads(request.body)
+    form = SportForm(body)
+
+    if form.is_valid():
+        obj = form.save(commit=False)
+        obj.user = user
+
+        workout_type = "sport"
+        activity = obj.activity
+        duration = obj.duration
+
+        score = points(workout_type, activity, duration)
+        user.profile.score += score
+        user.profile.save()
+
+        obj.score = score
+        obj.save()
+        return JsonResponse({
+            "success": True,
+            "sport": {
+                "id": obj.id,
+                "user": {
+                    "id": obj.user_id,
+                    "username": obj.user.username,
+                },
+                "sport": obj.sport,
+                "duration": obj.duration,
+                "level": obj.level,
+                "date": obj.date.isoformat(),
+                "comment_count": obj.comment_count,
+                "score":score,
+            },
+            "message": "Sport workout added successfully"
+        }, status=201)
+    
+    return JsonResponse(
+        {"success": False, "errors": form.errors},
+        status=400
+    )
+
+
+@csrf_exempt
+def add_booze(request):
+    if request.method != "POST":
+        return JsonResponse ({ "success": False, "error": "Only Post Allowed"}, status = 405)
+
+    #getting user from JWT Token
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
+    
+    body = json.loads(request.body)
+    form = BoozeForm(body)
+
+    if form.is_valid():
+        obj = form.save(commit=False)
+        obj.user = user
+
+        workout_type = "booze"
+        activity = obj.drinks
+        duration = obj.number_of_drinks
+
+        score = points(workout_type, activity, duration)
+        user.profile.score += score
+        user.profile.save()
+
+        obj.score = score
+        obj.save()
+        return JsonResponse({
+            "success": True,
+            "booze": {
+                "id": obj.id,
+                "user": {
+                    "id": obj.user_id,
+                    "username": obj.user.username,
+                },
+                "number_of_drinks": obj.number_of_drinks,
+                "drinks": obj.drinks,
+                "date": obj.date.isoformat(),
+                "comment_count": obj.comment_count,
+                "score":score,
+            },
+            "message": "Booze workout added successfully"
+        }, status=201)
+    
+    return JsonResponse(
+        {"success": False, "errors": form.errors},
+        status=400
+    )
 
 
 @csrf_exempt

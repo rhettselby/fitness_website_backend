@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 import os
 from datetime import timedelta
 from .models import WearableConnection
-from fitness.models import Cardio
+from fitness.models import Cardio, Sport
 import requests
 import hashlib
 import hmac
@@ -54,20 +54,24 @@ def get_user_from_token(request):
 
 ##### Calculating Points Helper Function #####
 EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking"]
+CARDIO = ["run", "running", "virtualrun", "trailrun", "cycling", "swimming",
+           "yoga", "strength_training", "ride", "rowing", "virtualrow",
+           "pilates", "hiit", "stairstepper", "crossfit", "jumprope", "skating"]
 SPEED_INCLUDED = ["run", "running", "virtualrun", "trailrun"]
 INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strength_training","soccer", "basketball","tennis"]
 
 def strava_points(activity, duration, speed):
     score = 100
-    if activity.lower() not in EXCLUDED_ACTIVITIES:
+    if activity.lower() in CARDIO:
         score += duration
-    
-    if activity.lower() in SPEED_INCLUDED:
-        if speed and duration > 10:
-            mile_minutes = 1609.344 / speed / 60
-            if mile_minutes < 10:
-                multiplier = (10 - mile_minutes) ** .5
-                score += (multiplier * score)
+        if activity.lower() in SPEED_INCLUDED:
+            if speed and (duration > 10):
+                mile_minutes = 1609.344 / speed / 60
+                if mile_minutes < 10:
+                    multiplier = (10 - mile_minutes) ** .5
+                    score += (multiplier * score)
+    else:
+        score = score // 2
     integer_score = int(score)
     return integer_score
 
@@ -80,7 +84,8 @@ def oura_points(activity, duration, intensity):
             score *= 1.3
         elif intensity == "hard":
             score *= 2.5
-
+    if activity.lower() not in CARDIO:
+        score = score // 2
     integer_score = int(score)
     return integer_score
 
@@ -227,8 +232,6 @@ def sync_oura_for_user(user, days_back=7):
 
         duration_seconds = workout.get('duration', 0)
 
-       
-
         if not duration_seconds:
             start = workout.get('start_datetime')
             end = workout.get('end_datetime')
@@ -256,45 +259,91 @@ def sync_oura_for_user(user, days_back=7):
         ###Logic to prevent duplicate workouts with same start time (different workout id's)
         start_datetime = workout.get('start_datetime')
         
-        existing_workout = Cardio.objects.filter(
-            user=user,
-            date=start_datetime
-            ).first()
+        if activity_type in CARDIO or activity_type in EXCLUDED_ACTIVITIES:
 
-        if existing_workout:
-            #if new workout is longer, update existing workout
-            if duration_minutes > existing_workout.duration:
-                existing_workout.duration = duration_minutes
-                existing_workout.activity = f"Oura: {activity_type}"
-                existing_workout.external_id = f"oura_{oura_workout_id}"
-                existing_workout.save()
-                print(f"Updated workout to longer duration: {duration_minutes} min")
-                continue
-            else:
-                print(f"Skipping shorter duplicate workout")
-                continue
+            existing_workout = Cardio.objects.filter(
+                user=user,
+                date=start_datetime
+                ).first()
+
+            if existing_workout:
+                #if new workout is longer, update existing workout
+                if duration_minutes > existing_workout.duration:
+                    existing_workout.duration = duration_minutes
+                    existing_workout.activity = f"Oura: {activity_type}"
+                    existing_workout.external_id = f"oura_{oura_workout_id}"
+                    existing_workout.save()
+                    print(f"Updated workout to longer duration: {duration_minutes} min")
+                    continue
+                else:
+                    print(f"Skipping shorter duplicate workout")
+                    continue
+                
+
             
+            intensity = workout.get('intensity', 'easy')
 
+            score = oura_points(activity_type, duration_minutes, intensity)
+
+            _, created = Cardio.objects.get_or_create(
+                user=user,
+                external_id=f"oura_{oura_workout_id}",
+                defaults={
+                    'activity': f"Oura: {activity_type}",
+                    'date': workout.get('start_datetime'),
+                    'duration': duration_minutes,
+                    'score': score
+                }
+            )
+            if created: 
+                workouts_added += 1
+                user.profile.score += score
+                user.profile.save()
+                print(f"User {user} logged {score} points.")
         
-        intensity = workout.get('intensity', 'easy')
+        else:
+            #sport workout
+            existing_workout = Sport.objects.filter(
+                user=user,
+                date=start_datetime
+                ).first()
 
-        score = oura_points(activity_type, duration_minutes, intensity)
+            if existing_workout:
+                #if new workout is longer, update existing workout
+                if duration_minutes > existing_workout.duration:
+                    existing_workout.duration = duration_minutes
+                    existing_workout.sport = f"Oura: {activity_type}"
+                    existing_workout.external_id = f"oura_{oura_workout_id}"
+                    existing_workout.save()
+                    print(f"Updated workout to longer duration: {duration_minutes} min")
+                    continue
+                else:
+                    print(f"Skipping shorter duplicate workout")
+                    continue
+                
 
-        _, created = Cardio.objects.get_or_create(
-            user=user,
-            external_id=f"oura_{oura_workout_id}",
-            defaults={
-                'activity': f"Oura: {activity_type}",
-                'date': workout.get('start_datetime'),
-                'duration': duration_minutes,
-                'score': score
-            }
-        )
-        if created: 
-            workouts_added += 1
-            user.profile.score += score
-            user.profile.save()
-            print(f"User {user} logged {score} points.")
+            
+            intensity = workout.get('intensity', 'easy')
+
+            score = oura_points(activity_type, duration_minutes, intensity)
+
+            _, created = Sport.objects.get_or_create(
+                user=user,
+                external_id=f"oura_{oura_workout_id}",
+                defaults={
+                    'sport': f"Oura: {activity_type}",
+                    'date': workout.get('start_datetime'),
+                    'duration': duration_minutes,
+                    'score': score,
+                    'level': "recreational",
+                }
+            )
+            if created: 
+                workouts_added += 1
+                user.profile.score += score
+                user.profile.save()
+                print(f"User {user} logged {score} points.")
+        
 
     connection.last_sync = timezone.now()
     connection.save()
@@ -565,53 +614,95 @@ def sync_strava_for_user(user, days_back=30):
             duration_minutes = max(duration_seconds // 60, 1)
         else:
             duration_minutes = max(duration_seconds // 60, 1)
-    
-        #Disabled minimum duration threshold due to popular demand
+        
+            #Disabled minimum duration threshold due to popular demand
         if duration_minutes < 10:
             continue
 
-      
-         ###Logic to prevent duplicate workouts with same start time (different workout id's)
+        
+            ###Logic to prevent duplicate workouts with same start time (different workout id's)
         start_datetime = activity.get('start_date')
+
+        if activity_type in CARDIO or activity_type in EXCLUDED_ACTIVITIES:
+
+            existing_workout = Cardio.objects.filter(
+                user=user,
+                date=start_datetime
+                ).first()
+
+            if existing_workout:
+                #if new workout is longer, update existing workout
+                if duration_minutes > existing_workout.duration:
+                    existing_workout.duration = duration_minutes
+                    existing_workout.activity = f"Strava: {activity_type}"
+                    existing_workout.external_id = f"Strava_{strava_activity_id}"
+                    existing_workout.save()
+                    print(f"Updated workout to longer duration: {duration_minutes} min")
+                    continue
+                else:
+                    print(f"Skipping shorter duplicate workout")
+                    continue
         
-        existing_workout = Cardio.objects.filter(
-            user=user,
-            date=start_datetime
-            ).first()
-
-        if existing_workout:
-            #if new workout is longer, update existing workout
-            if duration_minutes > existing_workout.duration:
-                existing_workout.duration = duration_minutes
-                existing_workout.activity = f"Strava: {activity_type}"
-                existing_workout.external_id = f"Strava_{strava_activity_id}"
-                existing_workout.save()
-                print(f"Updated workout to longer duration: {duration_minutes} min")
-                continue
-            else:
-                print(f"Skipping shorter duplicate workout")
-                continue
-    
-        speed = activity.get('average_speed', None)
-        score = strava_points(activity_type, duration_minutes, speed)
+            speed = activity.get('average_speed', None)
+            score = strava_points(activity_type, duration_minutes, speed)
 
 
-        _, created = Cardio.objects.get_or_create(
-            user=user,
-            external_id=f"Strava_{strava_activity_id}",
-            defaults={
-                'activity': f"Strava: {activity_type}",
-                'date': activity_date,
-                'duration': duration_minutes,
-                'score': score,
-            }
-        )
+            _, created = Cardio.objects.get_or_create(
+                user=user,
+                external_id=f"Strava_{strava_activity_id}",
+                defaults={
+                    'activity': f"Strava: {activity_type}",
+                    'date': activity_date,
+                    'duration': duration_minutes,
+                    'score': score,
+                }
+            )
+            
+            if created:
+                workouts_added += 1
+                user.profile.score += score
+                user.profile.save()
+                print(f"User {user} logged {score} points")
+        else:
+            #Sport Workout
+            existing_workout = Sport.objects.filter(
+                user=user,
+                date=start_datetime
+                ).first()
+
+            if existing_workout:
+                #if new workout is longer, update existing workout
+                if duration_minutes > existing_workout.duration:
+                    existing_workout.duration = duration_minutes
+                    existing_workout.sport = f"Strava: {activity_type}"
+                    existing_workout.external_id = f"Strava_{strava_activity_id}"
+                    existing_workout.save()
+                    print(f"Updated workout to longer duration: {duration_minutes} min")
+                    continue
+                else:
+                    print(f"Skipping shorter duplicate workout")
+                    continue
         
-        if created:
-            workouts_added += 1
-            user.profile.score += score
-            user.profile.save()
-            print(f"User {user} logged {score} points")
+            score = strava_points(activity_type, duration_minutes, None)
+
+
+            _, created = Sport.objects.get_or_create(
+                user=user,
+                external_id=f"Strava_{strava_activity_id}",
+                defaults={
+                    'sport': f"Strava: {activity_type}",
+                    'date': activity_date,
+                    'duration': duration_minutes,
+                    'score': score,
+                    'level': "recreational",
+                }
+            )
+            
+            if created:
+                workouts_added += 1
+                user.profile.score += score
+                user.profile.save()
+                print(f"User {user} logged {score} points")
 
     connection.last_sync = timezone.now()
     connection.save()

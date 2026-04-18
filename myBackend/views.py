@@ -6,7 +6,7 @@ from django.db.models import Count
 from django.shortcuts import render
 from django.contrib.auth import get_user_model
 
-from fitness.models import Cardio, Gym  # import the CONCRETE models, not Workout
+from fitness.models import Cardio, Gym, Sport  # import the CONCRETE models, not Workout
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth import get_user_model
@@ -297,11 +297,21 @@ def leaderboard_api_jwt(request):
         .annotate(count=Count("id"))
     )
 
+    sport_counts = (
+        Sport.objects
+        .filter(date__gte=start_of_week, date__lte=end_of_week)
+        .values("user")
+        .annotate(count=Count("id"))
+    )
+
     totals = {}
     for row in cardio_counts:
         totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
 
     for row in gym_counts:
+        totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
+    
+    for row in sport_counts:
         totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
 
     data = []

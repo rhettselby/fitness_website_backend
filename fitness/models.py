@@ -72,3 +72,17 @@ class Like(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE) #Using content_type/object_id because Workout is abstract
     object_id = models.PositiveIntegerField()
     workout = GenericForeignKey('content_type', 'object_id')
+
+
+class Sport(Workout):
+    sport = models.CharField(max_length=75)
+    duration = models.IntegerField(default=1)
+
+    CHOICES = [("recreational", "Recreational"),("competitive", "Competitive")]
+
+    level = models.CharField(blank=True, choices = CHOICES, default="recreational")
+    external_id = models.CharField(max_length=100, null=True, blank=True)
+
+class Booze(Workout):
+    number_of_drinks = models.IntegerField(default=1)
+    drinks = models.JSONField(default=list)
