@@ -106,6 +106,7 @@ def recent_workouts_api(request):
                 'username': workout.user.username,
                 'comment_count':workout.comment_count,
                 'score':workout.score,
+                'image_url':workout.image.url if workout.image else None,
             })
         
         # Add gym workouts (duration will be null)
@@ -119,6 +120,7 @@ def recent_workouts_api(request):
                 'username': workout.user.username,
                 'comment_count': workout.comment_count,
                 'score':workout.score,
+                'image_url':workout.image.url if workout.image else None,
             })
 
         for workout in sport:
@@ -132,6 +134,7 @@ def recent_workouts_api(request):
                 'comment_count': workout.comment_count,
                 'score':workout.score,
                 'level':workout.level,
+                'image_url':workout.image.url if workout.image else None,
             })
         
         # Sort by date and get top 10
