@@ -3,7 +3,7 @@ from django.shortcuts import render
 from .models import Post
 from django.contrib.auth.decorators import login_required
 from . import forms
-from fitness.models import Gym, Cardio
+from fitness.models import Gym, Cardio, Sport
 
 # Create your views here.
 
@@ -91,6 +91,7 @@ def recent_workouts_api(request):
         # Get recent cardio and gym workouts
         cardio = Cardio.objects.select_related('user').order_by('-date')[:15]
         gym = Gym.objects.select_related('user').order_by('-date')[:15]
+        sport = Sport.objects.select_related('user').order_by('-date')[:15]
         
         workout_list = []
         
@@ -118,6 +119,19 @@ def recent_workouts_api(request):
                 'username': workout.user.username,
                 'comment_count': workout.comment_count,
                 'score':workout.score,
+            })
+
+        for workout in sport:
+            workout_list.append({
+                'id': workout.id,
+                'type': 'sport',
+                'sport': workout.sport,
+                'date': workout.date.isoformat(),
+                'duration': workout.duration,  #Gym workouts don't have a duration
+                'username': workout.user.username,
+                'comment_count': workout.comment_count,
+                'score':workout.score,
+                'level':workout.level,
             })
         
         # Sort by date and get top 10
