@@ -92,14 +92,17 @@ def add_gym_api_jwt(request):
 
 
     #Retrieve User inputed Exercises
-    body = json.loads(request.body)
-    exercises = body.get('exercises', [])
+    body = request.POST
+    exercises = json.loads(body.get('exercises', '[]'))
 
     form = GymForm(body)
 
     if form.is_valid():
         obj = form.save(commit=False)
         obj.user = user
+
+        if 'image' in request.FILES:
+            obj.image = request.FILES['image']
 
         workout_type = "gym"
         activity = obj.activity
@@ -127,6 +130,7 @@ def add_gym_api_jwt(request):
                 "comment_count": obj.comment_count,
                 "score": score,
                 "exercises": exercises,
+                "image_url": obj.image.url if obj.image else None,
             },
             "message": "Gym workout added successfully"
         }, status = 201)
@@ -150,12 +154,15 @@ def add_cardio_api_jwt(request):
     if not user:
         return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
     
-    body = json.loads(request.body)
+    body = request.POST
     form = CardioForm(body)
 
     if form.is_valid():
         obj = form.save(commit=False)
         obj.user = user
+
+        if 'image' in request.FILES:
+            obj.image = request.FILES['image']
 
         workout_type = "cardio"
         activity = obj.activity
@@ -180,6 +187,7 @@ def add_cardio_api_jwt(request):
                 "date": obj.date.isoformat(),
                 "comment_count": obj.comment_count,
                 "score":score,
+                "image_url": obj.image.url if obj.image else None,
             },
             "message": "Cardio workout added successfully"
         }, status=201)
@@ -200,12 +208,15 @@ def add_sport(request):
     if not user:
         return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
     
-    body = json.loads(request.body)
+    body = request.POST
     form = SportForm(body)
 
     if form.is_valid():
         obj = form.save(commit=False)
         obj.user = user
+
+        if 'image' in request.FILES:
+            obj.image = request.FILES['image']
 
         workout_type = "sport"
         sport = obj.sport
@@ -231,6 +242,7 @@ def add_sport(request):
                 "date": obj.date.isoformat(),
                 "comment_count": obj.comment_count,
                 "score":score,
+                "image_url": obj.image.url if obj.image else None,
             },
             "message": "Sport workout added successfully"
         }, status=201)
@@ -251,12 +263,15 @@ def add_booze(request):
     if not user:
         return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
     
-    body = json.loads(request.body)
+    body = request.POST
     form = BoozeForm(body)
 
     if form.is_valid():
         obj = form.save(commit=False)
         obj.user = user
+
+        if 'image' in request.FILES:
+            obj.image = request.FILES['image']
 
         workout_type = "booze"
         activity = obj.drinks
@@ -281,6 +296,7 @@ def add_booze(request):
                 "date": obj.date.isoformat(),
                 "comment_count": obj.comment_count,
                 "score":score,
+                "image_url": obj.image.url if obj.image else None,
             },
             "message": "Booze workout added successfully"
         }, status=201)
