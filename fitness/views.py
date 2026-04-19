@@ -208,10 +208,10 @@ def add_sport(request):
         obj.user = user
 
         workout_type = "sport"
-        activity = obj.activity
+        sport = obj.sport
         duration = obj.duration
 
-        score = points(workout_type, activity, duration)
+        score = points(workout_type, sport, duration)
         user.profile.score += score
         user.profile.save()
 
@@ -225,8 +225,8 @@ def add_sport(request):
                     "id": obj.user_id,
                     "username": obj.user.username,
                 },
-                "sport": obj.sport,
-                "duration": obj.duration,
+                "sport": sport,
+                "duration": duration,
                 "level": obj.level,
                 "date": obj.date.isoformat(),
                 "comment_count": obj.comment_count,
