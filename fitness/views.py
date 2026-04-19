@@ -154,6 +154,7 @@ def add_cardio_api_jwt(request):
     if not user:
         return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
     
+    #image requires POST
     body = request.POST
     form = CardioForm(body)
 
