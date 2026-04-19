@@ -56,7 +56,7 @@ def get_user_from_token(request):
 EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking"]
 CARDIO = ["run", "running", "virtualrun", "trailrun", "cycling", "swimming",
            "yoga", "strength_training", "ride", "rowing", "virtualrow",
-           "pilates", "hiit", "stairstepper", "crossfit", "jumprope", "skating"]
+           "pilates", "hiit", "stairstepper", "crossfit", "jumprope", "skating", "fitnessclass"]
 SPEED_INCLUDED = ["run", "running", "virtualrun", "trailrun"]
 INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strength_training","soccer", "basketball","tennis"]
 
@@ -259,7 +259,7 @@ def sync_oura_for_user(user, days_back=7):
         ###Logic to prevent duplicate workouts with same start time (different workout id's)
         start_datetime = workout.get('start_datetime')
         
-        if activity_type in CARDIO or activity_type in EXCLUDED_ACTIVITIES:
+        if activity_type.lower() in CARDIO or activity_type.lower() in EXCLUDED_ACTIVITIES:
 
             existing_workout = Cardio.objects.filter(
                 user=user,
@@ -623,7 +623,7 @@ def sync_strava_for_user(user, days_back=30):
             ###Logic to prevent duplicate workouts with same start time (different workout id's)
         start_datetime = activity.get('start_date')
 
-        if activity_type in CARDIO or activity_type in EXCLUDED_ACTIVITIES:
+        if activity_type.lower() in CARDIO or activity_type.lower() in EXCLUDED_ACTIVITIES:
 
             existing_workout = Cardio.objects.filter(
                 user=user,
