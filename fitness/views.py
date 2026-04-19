@@ -1,7 +1,7 @@
 import json
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
-from .models import Cardio, Gym, Comment, Like
+from .models import Booze, Cardio, Gym, Comment, Like, Sport
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from .forms import BoozeForm, GymForm, CardioForm, CommentForm, SportForm
@@ -334,6 +334,10 @@ def add_comment_api_jwt(request):
         model = Cardio
     elif workout_type == 'gym':
         model = Gym
+    elif workout_type == 'sport':
+        model = Sport
+    elif workout_type == 'booze':
+        model = Booze
     else:
         return JsonResponse({"success": False, "error": "Invalid workout type"}, status = 400)
 
@@ -373,6 +377,10 @@ def get_comments_api(request, workout_type, workout_id):
         model = Cardio
     elif workout_type == 'gym':
         model = Gym
+    elif workout_type == 'sport':
+        model = Sport
+    elif workout_type == 'booze':
+        model = Booze
     else:
         return JsonResponse({"success": False, "error": "Invalid workout type"}, status=400)
 
