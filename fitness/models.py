@@ -16,7 +16,7 @@ class Workout(models.Model):
     date = models.DateTimeField(default=timezone.now)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     score = models.IntegerField(default=0)
-    image = CloudinaryField('image', null=True, blank=True)
+    image = CloudinaryField('image', null=True, blank=True, format='jpg')
 
     #not a model field but a generic relation
     comments = GenericRelation('Comment') #Query Set manager that represents a databse relation

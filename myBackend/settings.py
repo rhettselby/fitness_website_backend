@@ -287,6 +287,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'wearables.tasks.sync_all_wearables',
         'schedule': crontab(hour='*/1'),
     },
+    'reset_score': {
+        'task': 'groups.tasks.reset_scores',
+        'schedule': crontab(minute=0, hour=8, day_of_week=1),  # Monday 12am PST = 8am UTC
+    },
 }
 
 
