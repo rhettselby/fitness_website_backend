@@ -56,9 +56,9 @@ def get_user_from_token(request):
 EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking"]
 CARDIO = ["run", "running", "virtualrun", "trailrun", "cycling", "swimming",
            "yoga", "strength_training", "ride", "rowing", "virtualrow",
-           "pilates", "hiit", "stairstepper", "crossfit", "jumprope", "skating", "fitnessclass"]
+           "pilates", "hiit", "stairstepper", "crossfit", "jumprope", "skating", "fitnessclass", "strengthtraining"]
 SPEED_INCLUDED = ["run", "running", "virtualrun", "trailrun"]
-INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strength_training","soccer", "basketball","tennis"]
+INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strength_training","soccer", "basketball","tennis", "strengthtraining"]
 
 def strava_points(activity, duration, speed):
     score = 100
