@@ -62,6 +62,8 @@ INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strengt
 
 def strava_points(activity, duration, speed):
     score = 100
+    if duration < 25:
+        return int(50)
     if activity.lower() in CARDIO:
         score += duration
         if activity.lower() in SPEED_INCLUDED:
