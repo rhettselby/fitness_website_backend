@@ -414,7 +414,7 @@ def get_comments_api(request, workout_type, workout_id):
         }, status=500)
     
     
-    
+@csrf_exempt
 def add_image(request, workout_id):
     if request.method != 'POST':
         return JsonResponse({"error": "Only POST requests allowed"}, status = 405)
