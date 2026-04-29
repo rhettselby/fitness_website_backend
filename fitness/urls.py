@@ -11,5 +11,5 @@ urlpatterns = [
   path('add/booze/', views.add_booze, name="add_booze"),
   path("api/comments/<str:workout_type>/<int:workout_id>/", views.get_comments_api, name='get_comments_api'),
   path("api/comments/", views.add_comment_api_jwt, name = 'add_comment_api_jwt'),
-  path("api/add-image/<int:image_id>/", views.add_image, name = 'add_image'),
+  path("api/add-image/<int:workout_id>/", views.add_image, name = 'add_image'),
 ]
