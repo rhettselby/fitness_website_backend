@@ -439,7 +439,7 @@ def add_image(request, workout_id):
         
         workout.save()
 
-        return JsonResponse({"Message": "Image added to workout successfully"}, status = 201)
+        return JsonResponse({"success": True, "Message": "Image added to workout successfully", "image_url": workout.image.url if workout.image else None}, status = 201)
     
     except Exception as e:
         return JsonResponse({"error": str(e)}, status = 500)
