@@ -430,7 +430,10 @@ def add_image(request, workout_id):
             try:
                 workout = Gym.objects.get(id=workout_id)
             except Gym.DoesNotExist:
-                return JsonResponse({"error": "Workout not found"}, status = 404)
+                try:
+                    workout = Sport.objects.get(id=workout_id)
+                except Sport.DoesNotExist:
+                    return JsonResponse({"error": "Workout not found"}, status = 404)
         
         if 'image' in request.FILES:
             workout.image = request.FILES['image']

@@ -143,6 +143,7 @@ def viewpage_api_jwt(request):
         "activity": get_activity_name(w),
         "date": w.date.isoformat(),
         "duration": w.duration if not isinstance(w, Gym) else None,
+        "image_url": w.image.url if w.image else None,
     }
     for w in workout_list
 ]
