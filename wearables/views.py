@@ -289,6 +289,7 @@ def sync_oura_for_user(user, days_back=7):
 
             _, created = Cardio.objects.get_or_create(
                 user=user,
+                start_dt = start_dt,
                 external_id=f"oura_{oura_workout_id}",
                 defaults={
                     'activity': f"Oura: {activity_type}",

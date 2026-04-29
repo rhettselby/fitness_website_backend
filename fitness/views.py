@@ -1,7 +1,7 @@
 import json
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
-from .models import Booze, Cardio, Gym, Comment, Like, Sport
+from .models import Booze, Cardio, Gym, Comment, Like, Sport, Workout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from .forms import BoozeForm, GymForm, CardioForm, CommentForm, SportForm
@@ -415,11 +415,31 @@ def get_comments_api(request, workout_type, workout_id):
     
     
     
-
-
-
-
-
-
-
+def add_image(request, workout_id):
+    if request.method != 'POST':
+        return JsonResponse({"error": "Only POST requests allowed"}, status = 405)
     
+    try:
+        user = get_user_from_token(request)
+        if not user:
+            return JsonResponse({"Error": "Authentication failed"}, status = 401)
+        
+        try:
+            workout = Cardio.objects.get(id=workout_id)
+        except Cardio.DoesNotExist:
+            try:
+                workout = Gym.objects.get(id=workout_id)
+            except Gym.DoesNotExist:
+                return JsonResponse({"error": "Workout not found"}, status = 404)
+        
+        if 'image' in request.FILES:
+            workout.image = request.FILES['image']
+        else:
+            return JsonResponse({"error": "Image not found"}, status = 404)
+        
+        workout.save()
+
+        return JsonResponse({"Message": "Image added to workout successfully"}, status = 201)
+    
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status = 500)
