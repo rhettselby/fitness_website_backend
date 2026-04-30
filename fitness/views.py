@@ -12,6 +12,7 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
+import cloudinary.uploader
 
 
 
@@ -436,7 +437,9 @@ def add_image(request, workout_id):
                     return JsonResponse({"error": "Workout not found"}, status = 404)
         
         if 'image' in request.FILES:
-            workout.image = request.FILES['image']
+            result = cloudinary.uploader.upload(request.FILES['image'])
+            workout.image = result
+            result.save()
         else:
             return JsonResponse({"error": "Image not found"}, status = 404)
         
