@@ -426,7 +426,7 @@ def add_image(request, workout_id):
             return JsonResponse({"Error": "Authentication failed"}, status = 401)
         
 
-        workout_type = request.FILES['workout_type']
+        workout_type = request.POST.get('workout_type')
         
         if workout_type == 'cardio':
             workout = Cardio.objects.get(id=workout_id)
