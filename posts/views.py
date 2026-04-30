@@ -90,6 +90,9 @@ def recent_workouts_api(request):
     Get the most recent workouts from all users (public feed)
     """
     try:
+        user = get_user_from_token(request)
+        if not user:
+            return JsonResponse({"error": "User not found"}, status = 401)
         # Get recent cardio and gym workouts
         cardio = Cardio.objects.select_related('user').order_by('-date')[:15]
         gym = Gym.objects.select_related('user').order_by('-date')[:15]
@@ -109,6 +112,7 @@ def recent_workouts_api(request):
                 'comment_count':workout.comment_count,
                 'score':workout.score,
                 'image_url':workout.image.url if workout.image else None,
+                'user':user,
             })
         
         # Add gym workouts (duration will be null)
@@ -123,6 +127,7 @@ def recent_workouts_api(request):
                 'comment_count': workout.comment_count,
                 'score':workout.score,
                 'image_url':workout.image.url if workout.image else None,
+                'user':user,
             })
 
         for workout in sport:
@@ -137,6 +142,7 @@ def recent_workouts_api(request):
                 'score':workout.score,
                 'level':workout.level,
                 'image_url':workout.image.url if workout.image else None,
+                'user':user,
             })
         
         # Sort by date and get top 10
@@ -147,11 +153,3 @@ def recent_workouts_api(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
     
-
-
-
-def me(request):
-    user = get_user_from_token(request)
-    if not user:
-        return JsonResponse({"authenticated": False}, status=401)
-    return JsonResponse({"id": user.id, "username": user.username})

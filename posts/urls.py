@@ -11,7 +11,6 @@ urlpatterns = [
     path('api/new-post/', views.post_new_api, name = "new-post"),
     path('api/<slug:slug>', views.post_page_api, name = "page"),
     path('recent-workouts/', views.recent_workouts_api, name='recent_workouts_api'),
-    path('me/', views.me, name = 'me'), 
 ]
 
 
