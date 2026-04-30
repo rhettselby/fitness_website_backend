@@ -438,7 +438,7 @@ def add_image(request, workout_id):
         
         if 'image' in request.FILES:
             result = cloudinary.uploader.upload(request.FILES['image'])
-            workout.image = result['secure_url']
+            workout.image = result['public_id']
             workout.save()
         else:
             return JsonResponse({"error": "Image not found"}, status = 404)
