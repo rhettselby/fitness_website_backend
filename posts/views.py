@@ -92,9 +92,9 @@ def recent_workouts_api(request):
     try:
         user = get_user_from_token(request)
         # Get recent cardio and gym workouts
-        cardio = Cardio.objects.select_related('user').order_by('-date')[:15]
-        gym = Gym.objects.select_related('user').order_by('-date')[:15]
-        sport = Sport.objects.select_related('user').order_by('-date')[:15]
+        cardio = Cardio.objects.select_related('user').order_by('-date')[:10]
+        gym = Gym.objects.select_related('user').order_by('-date')[:10]
+        sport = Sport.objects.select_related('user').order_by('-date')[:10]
         
         workout_list = []
         
