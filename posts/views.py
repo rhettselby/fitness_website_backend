@@ -112,9 +112,6 @@ def recent_workouts_api(request):
                 'comment_count':workout.comment_count,
                 'score':workout.score,
                 'image_url':workout.image.url if workout.image else None,
-                'user': {
-                    'id': user.id, 'username': user.username
-                }
             })
         
         # Add gym workouts (duration will be null)
@@ -129,9 +126,6 @@ def recent_workouts_api(request):
                 'comment_count': workout.comment_count,
                 'score':workout.score,
                 'image_url':workout.image.url if workout.image else None,
-                'user': {
-                    'id': user.id, 'username': user.username
-                }
             })
 
         for workout in sport:
@@ -146,15 +140,12 @@ def recent_workouts_api(request):
                 'score':workout.score,
                 'level':workout.level,
                 'image_url':workout.image.url if workout.image else None,
-                'user': {
-                    'id': user.id, 'username': user.username
-                },
             })
         
         # Sort by date and get top 10
         workout_list = sorted(workout_list, key=lambda w: w['date'], reverse=True)[:10]
         
-        return JsonResponse({'workouts': workout_list}, status=200)
+        return JsonResponse({'workouts': workout_list, 'user': {'id': user.id, 'username': user.username}}, status=200)
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
