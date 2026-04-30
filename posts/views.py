@@ -91,8 +91,6 @@ def recent_workouts_api(request):
     """
     try:
         user = get_user_from_token(request)
-        if not user:
-            return JsonResponse({"error": "User not found"}, status = 401)
         # Get recent cardio and gym workouts
         cardio = Cardio.objects.select_related('user').order_by('-date')[:15]
         gym = Gym.objects.select_related('user').order_by('-date')[:15]
@@ -144,8 +142,19 @@ def recent_workouts_api(request):
         
         # Sort by date and get top 10
         workout_list = sorted(workout_list, key=lambda w: w['date'], reverse=True)[:10]
+
+        if user:
+            user_info = {
+                'id': user.id,
+                'username': user.username,
+            }
+        else:
+            user_info = {
+                'id': None,
+                'username': None,
+            }
         
-        return JsonResponse({'workouts': workout_list, 'user': {'id': user.id, 'username': user.username}}, status=200)
+        return JsonResponse({'workouts': workout_list, 'user': user_info}, status=200)
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
