@@ -1,5 +1,7 @@
 from django.http import JsonResponse
 from django.shortcuts import render
+
+from fitness.views import get_user_from_token
 from .models import Post
 from django.contrib.auth.decorators import login_required
 from . import forms
@@ -144,3 +146,12 @@ def recent_workouts_api(request):
         
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+    
+
+
+
+def me(request):
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"authenticated": False}, status=401)
+    return JsonResponse({"id": user.id, "username": user.username})
