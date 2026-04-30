@@ -416,7 +416,7 @@ def get_comments_api(request, workout_type, workout_id):
     
     
 @csrf_exempt
-def add_image(request, workout_id):
+def add_image(request, workout_id, workout_type):
     if request.method != 'POST':
         return JsonResponse({"error": "Only POST requests allowed"}, status = 405)
     
@@ -425,16 +425,15 @@ def add_image(request, workout_id):
         if not user:
             return JsonResponse({"Error": "Authentication failed"}, status = 401)
         
-        try:
+        if workout_type == 'cardio':
             workout = Cardio.objects.get(id=workout_id)
-        except Cardio.DoesNotExist:
-            try:
-                workout = Gym.objects.get(id=workout_id)
-            except Gym.DoesNotExist:
-                try:
-                    workout = Sport.objects.get(id=workout_id)
-                except Sport.DoesNotExist:
-                    return JsonResponse({"error": "Workout not found"}, status = 404)
+        elif workout_type == 'gym':
+            workout = Gym.objects.get(id=workout_id)
+        elif workout_type == 'sport':
+            workout = Sport.objects.get(id=workout_id)
+        else:
+            workout = None
+            return JsonResponse({"error": "Workout not found"}, status = 404)
         
         if 'image' in request.FILES:
             workout.image = request.FILES['image']
