@@ -13,6 +13,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
 import cloudinary.uploader
+from groups.tasks import verify_workout_image
 
 
 
@@ -118,6 +119,9 @@ def add_gym_api_jwt(request):
         obj.exercises = exercises
         obj.save()
 
+        if obj.image:
+            verify_workout_image.delay(obj.image.url, obj.activity, "gym", obj.id, obj.user.id)
+
         return JsonResponse({
             "success": True,
             "gym": {
@@ -176,6 +180,8 @@ def add_cardio_api_jwt(request):
 
         obj.score = score
         obj.save()
+        if obj.image:
+            verify_workout_image.delay(obj.image.url, obj.activity, "cardio", obj.id, obj.user.id)
         return JsonResponse({
             "success": True,
             "cardio": {
@@ -194,6 +200,7 @@ def add_cardio_api_jwt(request):
             "message": "Cardio workout added successfully"
         }, status=201)
     
+                                   
     return JsonResponse(
         {"success": False, "errors": form.errors},
         status=400
@@ -230,6 +237,10 @@ def add_sport(request):
 
         obj.score = score
         obj.save()
+
+        if obj.image:
+            verify_workout_image.delay(obj.image.url, obj.sport, "sport", obj.id, obj.user.id)
+
         return JsonResponse({
             "success": True,
             "sport": {
@@ -285,6 +296,10 @@ def add_booze(request):
 
         obj.score = score
         obj.save()
+
+        if obj.image:
+            verify_workout_image.delay(obj.image.url, None, "booze", obj.id, obj.user.id)
+
         return JsonResponse({
             "success": True,
             "booze": {
@@ -440,6 +455,7 @@ def add_image(request, workout_id):
         
         if 'image' in request.FILES:
             workout.image = request.FILES['image']
+            verify_workout_image.delay((workout.image.url, workout.activity, workout_type, workout.id, workout.user.id))
 
         else:
             return JsonResponse({"error": "Image not found"}, status = 404)

@@ -31,6 +31,7 @@ class Workout(models.Model):
     @property
     def comment_count(self):
         return self.comments.count()
+    verified = models.BooleanField(default = False)
 
 #cardio class, contains date, type, and duration members
 class Cardio(Workout):
