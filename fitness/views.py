@@ -455,6 +455,8 @@ def add_image(request, workout_id):
         
         if 'image' in request.FILES:
             workout.image = request.FILES['image']
+            #must save to db so cloudinary processes before extracting url
+            workout.save()
             verify_workout_image.delay((workout.image.url, workout.activity, workout_type, workout.id, workout.user.id))
 
         else:
