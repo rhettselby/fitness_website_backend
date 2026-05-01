@@ -16,6 +16,7 @@ import anthropic
 
 @shared_task
 def verify_workout_image(image_url: str, exercise: str, workout_type, workout_id, user_id) -> bool:
+    print("image verification initiated")
     client = anthropic.Anthropic()
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -48,6 +49,7 @@ def verify_workout_image(image_url: str, exercise: str, workout_type, workout_id
         user.profile.save()
         return True
     
+    print(result)
     return False
     
 
