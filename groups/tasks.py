@@ -15,7 +15,7 @@ import anthropic
 
 
 @shared_task
-def verify_workout_image(image_url: str, exercise: str, workout_type, workout_id, user_id) -> bool:
+def verify_workout_image(image_url: str, exercise: str, workout_type: str, workout_id: int, user_id: int) -> bool:
     print("image verification initiated")
     client = anthropic.Anthropic()
     response = client.messages.create(
@@ -25,9 +25,11 @@ def verify_workout_image(image_url: str, exercise: str, workout_type, workout_id
             "role": "user",
             "content": [
                 {"type": "image", "source": {"type": "url", "url": image_url}},
-                {"type": "text", "text": f"""Does this image provide at least minor evidence that the person in the photo had
-                been performing {exercise}? Evidence could include the location, other people, signs of activity or anything that 
-                 might indicate the given workout. Please be somewhat leniant, return yes or no and a brief reasoning of your decision.  """}
+                {"type": "text", "text": f"""
+                    Does this image provide at least minor evidence that the person in the photo had
+                    been performing {exercise}? Evidence could include the location, other people, signs of activity or anything that 
+                    might indicate the given workout. Please be somewhat leniant, return yes or no and a brief reasoning of your decision.
+                 """}
             ]
         }]
     )
