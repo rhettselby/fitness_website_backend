@@ -1,5 +1,5 @@
 from celery import shared_task
-from fitness.models import Cardio, Gym, Sport, Booze
+from fitness.models import Cardio, Gym, Sport
 from django.contrib.auth.models import User
 from profile_page.models import Profile
 

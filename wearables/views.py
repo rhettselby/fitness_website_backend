@@ -233,9 +233,11 @@ def sync_oura_for_user(user, days_back=7):
         oura_workout_id = str(workout.get('id'))
 
         duration_seconds = workout.get('duration', 0)
+        start_datetime = workout.get('start_datetime')
+        start_dt = parse_datetime(start_datetime)
 
         if not duration_seconds:
-            start = workout.get('start_datetime')
+            start = start_dt
             end = workout.get('end_datetime')
 
             if start and end:
@@ -289,13 +291,13 @@ def sync_oura_for_user(user, days_back=7):
 
             _, created = Cardio.objects.get_or_create(
                 user=user,
-                start_dt = start_dt,
                 external_id=f"oura_{oura_workout_id}",
                 defaults={
                     'activity': f"Oura: {activity_type}",
                     'date': workout.get('start_datetime'),
                     'duration': duration_minutes,
-                    'score': score
+                    'score': score,
+                    'start_dt': start_dt,
                 }
             )
             if created: 
