@@ -24,5 +24,7 @@ urlpatterns = [
     path('whoop/disconnect/', views.whoop_disconnect, name='whoop_disconnect'),
     
     path('status/', views.check_connection_status, name='connection_status'),
+    path('oura/debug/', views.debug_sync, name='debug_sync'),
+
 ]   
 

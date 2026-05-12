@@ -1194,3 +1194,17 @@ def check_connection_status(request):
         })
     
     return JsonResponse(status)
+
+
+
+@csrf_exempt
+def debug_sync(request):
+    import traceback
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({'error': 'Auth required'}, status=401)
+    try:
+        result = sync_oura_for_user(user, days_back=7)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({'error': str(e), 'trace': traceback.format_exc()})
