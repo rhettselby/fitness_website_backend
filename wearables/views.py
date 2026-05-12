@@ -232,26 +232,21 @@ def sync_oura_for_user(user, days_back=7):
         activity_type = workout.get('activity', 'Unknown Activity')
         oura_workout_id = str(workout.get('id'))
 
-        duration_seconds = workout.get('duration', 0)
-        print("Oura duration found")
         start_datetime = workout.get('start_datetime')
         start_dt = parse_datetime(start_datetime)
 
-        if not duration_seconds:
-            print("No duration for oura workout")
-            start = start_dt
-            end = workout.get('end_datetime')
 
-            if start and end:
-                end_dt = parse_datetime(end)
-                duration_seconds = int((end_dt - start_dt).total_seconds())
-            else:
-                print("Oura workout has duration_seconds = 0")
-                duration_seconds = 0
+        start = start_dt
+        end = workout.get('end_datetime')
 
-            duration_minutes = max(duration_seconds // 60, 1)
+        if start and end:
+            end_dt = parse_datetime(end)
+            duration_seconds = int((end_dt - start_dt).total_seconds())
         else:
-            duration_minutes = max(duration_seconds // 60, 1)
+            print("Oura workout duration not found")
+            duration_seconds = 0
+
+        duration_minutes = max(duration_seconds // 60, 1)
     
         if duration_minutes < 25:
             continue
@@ -300,7 +295,6 @@ def sync_oura_for_user(user, days_back=7):
                     'date': workout.get('start_datetime'),
                     'duration': duration_minutes,
                     'score': score,
-                    'start_dt': start_dt,
                 }
             )
             if created: 
