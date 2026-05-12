@@ -376,6 +376,8 @@ def sync_oura(request):
 @csrf_exempt
 def oura_webhook(request):
 
+    print("Oura webhook initiated")
+
     signature = request.headers.get('X-Oura-Signature')
     if signature and OURA_WEBHOOK_SECRET:
         expected_signature = hmac.new(
@@ -395,18 +397,22 @@ def oura_webhook(request):
     event_type = data.get('event_type')
     oura_user_id = data.get('user_id')
 
-    try: connection = WearableConnection.objects.get(
+    try: 
+        connection = WearableConnection.objects.get(
         external_user_id=oura_user_id,
         device_type='oura',
         is_active=True
     )
+        print("oura connection established")
     
     except WearableConnection.DoesNotExist:
+        print("Oura webhook failed")
         return JsonResponse({'error': 'User Not Found'}, status = 404)
     
     if event_type == 'workout.created':
         try:
             sync_oura_for_user(connection.user, days_back=1)
+            print("sync_oura_for_user called")
         except Exception as e: # stores error in e
             return JsonResponse({'error': str(e)}, status = 500)
         
