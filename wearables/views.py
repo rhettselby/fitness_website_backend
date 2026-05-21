@@ -808,15 +808,81 @@ def strava_disconnect(request):
     ################WHOOP###################################
 
 
+##### Whoop sport ID → human-readable name mapping
+WHOOP_SPORT_IDS = {
+    -1: "Activity",
+    0: "Running",
+    1: "Cycling",
+    16: "Baseball",
+    17: "Basketball",
+    18: "Rowing",
+    21: "Football",
+    22: "Golf",
+    24: "Ice Hockey",
+    25: "Lacrosse",
+    27: "Obstacle Course",
+    28: "Strengthtraining",
+    29: "Strengthtraining",
+    32: "Soccer",
+    33: "Softball",
+    34: "Squash",
+    35: "Swimming",
+    36: "Tennis",
+    37: "Running",
+    38: "Volleyball",
+    39: "Water Polo",
+    41: "Boxing",
+    42: "Dance",
+    44: "Martial Arts",
+    45: "Yoga",
+    46: "Meditation",
+    47: "Other",
+    48: "Crossfit",
+    49: "Running",
+    51: "Gymnastics",
+    52: "Hiking",
+    53: "Horseback Riding",
+    55: "Kayaking",
+    57: "Paddleboarding",
+    58: "Pilates",
+    59: "Rock Climbing",
+    60: "Rowing",
+    61: "Skating",
+    62: "Skiing",
+    63: "Snowboarding",
+    65: "Stairstepper",
+    66: "Surfing",
+    70: "Walking",
+    72: "Strengthtraining",
+    74: "Cycling",
+    82: "Hiit",
+    83: "Jumprope",
+}
+
+# Whoop strain is 0–21; map to intensity buckets used by oura_points
+def _whoop_strain_to_intensity(strain):
+    if strain is None:
+        return "easy"
+    if strain >= 18:
+        return "hard"
+    if strain >= 14:
+        return "moderate"
+    return "easy"
+
+
 ##### validate whoop signature (required for webhooks)
 
 def validate_whoop_signature(request):
     signature = request.headers.get('X-WHOOP-Signature')
     timestamp = request.headers.get('X-WHOOP-Signature-Timestamp')
-    
+
     if not signature or not timestamp:
         return False
-    
+
+    if not WHOOP_CLIENT_SECRET:
+        logger.error("WHOOP_CLIENT_SECRET not configured")
+        return False
+
     message = timestamp + request.body.decode('utf-8')
     expected = base64.b64encode(
         hmac.new(
@@ -825,14 +891,13 @@ def validate_whoop_signature(request):
             hashlib.sha256
         ).digest()
     ).decode()
-    
+
     return hmac.compare_digest(signature, expected)
 
 
 
 ####Automatic Adding Workouts ###
 def sync_whoop_for_user(user, days_back=30):
-    """Helper function to sync Whoop data for a specific user"""
     try:
         connection = WearableConnection.objects.get(
             user=user,
@@ -841,16 +906,13 @@ def sync_whoop_for_user(user, days_back=30):
         )
     except WearableConnection.DoesNotExist:
         raise Exception("Whoop not connected")
-    
+
     # REFRESH TOKEN IF EXPIRED
     if connection.expires_at and timezone.now() >= connection.expires_at:
         print(f"Refreshing expired Whoop token for user {user.id}")
-        
         token_response = requests.post(
             'https://api.prod.whoop.com/oauth/oauth2/token',
-            headers={
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
+            headers={'Content-Type': 'application/x-www-form-urlencoded'},
             data={
                 'grant_type': 'refresh_token',
                 'refresh_token': connection.refresh_token,
@@ -858,7 +920,6 @@ def sync_whoop_for_user(user, days_back=30):
                 'client_secret': WHOOP_CLIENT_SECRET,
             }
         )
-        
         if token_response.status_code == 200:
             token_data = token_response.json()
             connection.access_token = token_data['access_token']
@@ -869,33 +930,34 @@ def sync_whoop_for_user(user, days_back=30):
         else:
             print(f"Failed to refresh Whoop token: {token_response.status_code} - {token_response.text}")
             raise Exception("Failed to refresh Whoop token")
-    
-    # Whoop uses ISO format dates
+
     end_time = timezone.now()
     start_time = end_time - timedelta(days=days_back)
-
     end_date = end_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
     start_date = start_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
-    
+
     headers = {'Authorization': f'Bearer {connection.access_token}'}
-    
     response = requests.get(
         f'https://api.prod.whoop.com/developer/v1/activity/workout?start={start_date}&end={end_date}',
         headers=headers
     )
-    
+
     if response.status_code != 200:
         print(f"Failed to fetch Whoop workouts: {response.status_code} - {response.text}")
         raise Exception(f"Failed to fetch Whoop data: {response.status_code}")
-    
+
     data = response.json()
     workouts_added = 0
-    
+
     for workout in data.get('records', []):
-        sport_name = workout.get('sport_id', 'Unknown Activity')
+        sport_id = workout.get('sport_id')
+        sport_name = WHOOP_SPORT_IDS.get(sport_id, f"Sport {sport_id}")
+        activity_lower = sport_name.lower()
+
         whoop_workout_id = str(workout.get('id'))
         workout_start = workout.get('start')
         workout_end = workout.get('end')
+
         if workout_start and workout_end:
             start_dt = parse_datetime(workout_start)
             end_dt = parse_datetime(workout_end)
@@ -903,25 +965,81 @@ def sync_whoop_for_user(user, days_back=30):
         else:
             continue
 
-        #skip short workouts
         if duration_minutes < 10:
             continue
 
-        _, created = Cardio.objects.get_or_create(
-            user=user,
-            external_id=f"whoop_{whoop_workout_id}",
-            defaults={
-                'activity': f"Whoop: {sport_name}",
-                'date': workout_start,
-                'duration': duration_minutes,
-            }
-        )
-        if created:
-            workouts_added += 1
-    
+        # Walking/hiking minimum 45 min
+        if activity_lower in EXCLUDED_ACTIVITIES and duration_minutes < 45:
+            print(f"Skipping short Whoop {sport_name} ({duration_minutes} min)")
+            continue
+
+        strain = (workout.get('score') or {}).get('strain')
+        intensity = _whoop_strain_to_intensity(strain)
+        score = oura_points(activity_lower, duration_minutes, intensity)
+
+        if activity_lower in CARDIO or activity_lower in EXCLUDED_ACTIVITIES:
+            # Duplicate prevention: same user + same start time
+            existing = Cardio.objects.filter(user=user, date=workout_start).first()
+            if existing:
+                if duration_minutes > existing.duration:
+                    existing.duration = duration_minutes
+                    existing.activity = f"Whoop: {sport_name}"
+                    existing.external_id = f"whoop_{whoop_workout_id}"
+                    existing.save()
+                    print(f"Updated Whoop workout to longer duration: {duration_minutes} min")
+                else:
+                    print("Skipping shorter duplicate Whoop workout")
+                continue
+
+            _, created = Cardio.objects.get_or_create(
+                user=user,
+                external_id=f"whoop_{whoop_workout_id}",
+                defaults={
+                    'activity': f"Whoop: {sport_name}",
+                    'date': workout_start,
+                    'duration': duration_minutes,
+                    'score': score,
+                }
+            )
+            if created:
+                workouts_added += 1
+                user.profile.score += score
+                user.profile.save()
+                print(f"User {user} logged {score} Whoop points.")
+        else:
+            existing = Sport.objects.filter(user=user, date=workout_start).first()
+            if existing:
+                if duration_minutes > existing.duration:
+                    existing.duration = duration_minutes
+                    existing.sport = f"Whoop: {sport_name}"
+                    existing.external_id = f"whoop_{whoop_workout_id}"
+                    existing.save()
+                    print(f"Updated Whoop sport workout to longer duration: {duration_minutes} min")
+                else:
+                    print("Skipping shorter duplicate Whoop sport workout")
+                continue
+
+            _, created = Sport.objects.get_or_create(
+                user=user,
+                external_id=f"whoop_{whoop_workout_id}",
+                defaults={
+                    'sport': f"Whoop: {sport_name}",
+                    'date': workout_start,
+                    'duration': duration_minutes,
+                    'score': score,
+                    'level': "recreational",
+                }
+            )
+            if created:
+                workouts_added += 1
+                user.profile.score += score
+                user.profile.save()
+                print(f"User {user} logged {score} Whoop points.")
+
     connection.last_sync = timezone.now()
     connection.save()
-    
+
+    print(f"Whoop sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
 
 
@@ -957,7 +1075,7 @@ def whoop_connect(request):
         f"client_id={WHOOP_CLIENT_ID}&"
         f"redirect_uri={WHOOP_REDIRECT_URI}&"
         f"response_type=code&"
-        f"scope=read:workout&"
+        f"scope=read:workout%20offline&"
         f"state={state}"
     )
     
@@ -1027,27 +1145,9 @@ def whoop_callback(request):
             }, status=400)
         
         token_data = token_response.json()
-        
-        # User info retrieval
-        headers = {
-            'Authorization': f'Bearer {token_data["access_token"]}',
-            'Accept': 'application/json'
-        }
-        
-        user_info_response = requests.get(
-            'https://api.prod.whoop.com/developer/v1/user/profile/basic',
-            headers=headers,
-            timeout=10
-        )
-        
-        logger.info(f"User Info Response Status: {user_info_response.status_code}")
-        
-        if user_info_response.status_code == 200:
-            user_info = user_info_response.json()
-            whoop_user_id = str(user_info.get('user_id'))
-        else:
-            # Fallback to generating a unique identifier
-            whoop_user_id = token_data.get('access_token')[-10:]
+
+        # Whoop always includes user_id in the token response
+        whoop_user_id = str(token_data.get('user_id', ''))
         
         # Save or update connection
         connection, created = WearableConnection.objects.update_or_create(
