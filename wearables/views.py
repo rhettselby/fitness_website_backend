@@ -918,6 +918,7 @@ def sync_whoop_for_user(user, days_back=30):
                 'refresh_token': connection.refresh_token,
                 'client_id': WHOOP_CLIENT_ID,
                 'client_secret': WHOOP_CLIENT_SECRET,
+                'redirect_uri': WHOOP_REDIRECT_URI,
             }
         )
         if token_response.status_code == 200:

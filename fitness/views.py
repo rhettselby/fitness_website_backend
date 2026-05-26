@@ -457,10 +457,10 @@ def add_image(request, workout_id):
             workout.image = request.FILES['image']
             #must save to db so cloudinary processes before extracting url
             workout.save()
-            try:
-                verify_workout_image.delay((workout.image.url, workout.activity, workout_type, workout.id, workout.user.id))
-            except Exception as e:
-                return JsonResponse({"error": str(e)}, status = 500)
+            #try:
+                #verify_workout_image.delay((workout.image.url, workout.activity, workout_type, workout.id, workout.user.id))
+            #except Exception as e:
+                #return JsonResponse({"error": str(e)}, status = 500)
 
         else:
             return JsonResponse({"error": "Image not found"}, status = 404)
