@@ -83,9 +83,9 @@ def oura_points(activity, duration, intensity):
         score += duration
     if activity.lower() in INTENSITY_INCLUDED:
         if intensity == "moderate":
-            score *= 1.5
+            score *= 1.9
         elif intensity == "hard":
-            score *= 3.2
+            score *= 3.8
     if activity.lower() not in CARDIO:
         score = score // 2
     integer_score = int(score)
