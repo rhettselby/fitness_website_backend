@@ -1146,10 +1146,25 @@ def whoop_callback(request):
             }, status=400)
         
         token_data = token_response.json()
+        logger.info(f"Whoop token data keys: {list(token_data.keys())}")
 
-        # Whoop always includes user_id in the token response
+        # Whoop includes user_id in the token response, but fall back to the
+        # profile endpoint if it's missing so the webhook lookup never breaks.
         whoop_user_id = str(token_data.get('user_id', ''))
-        
+        if not whoop_user_id:
+            try:
+                profile_resp = requests.get(
+                    'https://api.prod.whoop.com/developer/v1/user/profile/basic',
+                    headers={'Authorization': f'Bearer {token_data["access_token"]}'}
+                )
+                if profile_resp.status_code == 200:
+                    whoop_user_id = str(profile_resp.json().get('user_id', ''))
+                    logger.info(f"Fetched Whoop user_id from profile: {whoop_user_id}")
+                else:
+                    logger.warning(f"Could not fetch Whoop profile: {profile_resp.status_code}")
+            except Exception as profile_err:
+                logger.warning(f"Profile fetch failed: {profile_err}")
+
         # Save or update connection
         connection, created = WearableConnection.objects.update_or_create(
             user=user,
@@ -1210,8 +1225,10 @@ def whoop_webhook(request):
                 return JsonResponse({'status': 'success', 'result': sync_result})
             
             except WearableConnection.DoesNotExist:
-                logger.warning(f"No active connection for Whoop user {whoop_user_id}")
-                return JsonResponse({'error': 'User not found'}, status=404)
+                logger.error(f"No active connection for Whoop user {whoop_user_id}")
+                # Return 200 so Whoop stops retrying — a 404/5xx causes Whoop
+                # to keep sending the same webhook event indefinitely.
+                return JsonResponse({'status': 'ignored', 'reason': 'no active connection'}, status=200)
             
             except Exception as sync_error:
                 logger.error(f"Sync Error: {sync_error}", exc_info=True)
