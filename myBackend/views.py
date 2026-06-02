@@ -6,10 +6,9 @@ from django.db.models import Count
 from django.shortcuts import render
 from django.contrib.auth import get_user_model
 
-from fitness.models import Cardio, Gym, Sport  # import the CONCRETE models, not Workout
+from fitness.models import Cardio, Gym, Sport
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
@@ -191,69 +190,23 @@ def leaderboard_api(request):
         response['Access-Control-Allow-Headers'] = 'Content-Type'
         response['Access-Control-Allow-Credentials'] = 'true'
         return response
-    
-    current_time = now_utc()
-    week_start = beginning_of_week(current_time)
 
-    start_datetime = week_start
-    end_datetime = current_time
-
-    # Count Cardio workouts this week
-    cardio_counts = (
-        Cardio.objects
-        .filter(date__gte=start_datetime, date__lte=end_datetime)
-        .values("user")
-        .annotate(count=Count("id"))
+    top_profiles = (
+        Profile.objects
+        .select_related('user')
+        .order_by('-score')[:10]
     )
 
-    # Count Gym workouts this week
-    gym_counts = (
-        Gym.objects
-        .filter(date__gte=start_datetime, date__lte=end_datetime)
-        .values("user")
-        .annotate(count=Count("id"))
-    )
+    data = [
+        {
+            'username': p.user.username,
+            'score': p.score,
+            'bio': p.bio or None,
+            'location': p.location or None,
+        }
+        for p in top_profiles
+    ]
 
-    totals = {}
-    for row in cardio_counts:
-        uid = row["user"]
-        totals[uid] = totals.get(uid, 0) + row["count"]
-    for row in gym_counts:
-        uid = row["user"]
-        totals[uid] = totals.get(uid, 0) + row["count"]
-
-    data = []
-    User = get_user_model()
-    for user_id, workout_count in totals.items():
-        try:
-            user_obj = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            continue
-        
-        # Get profile data if it exists
-        profile_data = {}
-        try:
-            profile = Profile.objects.get(user=user_obj)
-            profile_data = {
-                "bio": profile.bio if profile.bio else None,
-                "location": profile.location if profile.location else None,
-            }
-        except Profile.DoesNotExist:
-            profile_data = {
-                "bio": None,
-                "location": None,
-            }
-        
-        data.append({
-            "username": user_obj.username,  # Changed from "user" to "username"
-            "count": workout_count,
-            "bio": profile_data.get("bio"),
-            "location": profile_data.get("location"),
-        })
-
-    # Sort by count (descending) - highest count first
-    data.sort(key=lambda x: x["count"], reverse=True)
-    
     response = JsonResponse({"leaderboard": data})
     response['Access-Control-Allow-Origin'] = 'http://localhost:5173'
     response['Access-Control-Allow-Credentials'] = 'true'
@@ -275,67 +228,20 @@ def leaderboard_api_jwt(request):
     if not user:
         return JsonResponse({"error": "Authentication required"}, status=401)
 
-    pst = pytz.timezone('America/Los_Angeles')
-
-    #Create one week zone
-    today = timezone.now().astimezone(pst)
-    start_of_week = today.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=today.weekday())
-    end_of_week = start_of_week + timedelta(days=7)
-
-    cardio_counts = (
-        Cardio.objects
-        .filter(date__gte=start_of_week, date__lte=end_of_week)
-        .values("user")
-        #adds a annotated field to the object (not in database)
-        .annotate(count=Count("id"))
+    top_profiles = (
+        Profile.objects
+        .select_related('user')
+        .order_by('-score')[:10]
     )
 
-    gym_counts = (
-        Gym.objects
-        .filter(date__gte=start_of_week, date__lte=end_of_week)
-        .values("user")
-        .annotate(count=Count("id"))
-    )
-
-    sport_counts = (
-        Sport.objects
-        .filter(date__gte=start_of_week, date__lte=end_of_week)
-        .values("user")
-        .annotate(count=Count("id"))
-    )
-
-    totals = {}
-    for row in cardio_counts:
-        totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
-
-    for row in gym_counts:
-        totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
-    
-    for row in sport_counts:
-        totals[row["user"]] = totals.get(row["user"], 0) + row["count"]
-
-    data = []
-    for user_id, workout_count in totals.items():
-        try:
-            user_obj = User.objects.get(id=user_id)
-        except User.DoesNotExist:
-            continue
-
-        try:
-            profile = Profile.objects.get(user=user_obj)
-            bio = profile.bio
-            location = profile.location
-        except Profile.DoesNotExist:
-            bio = None
-            location = None
-
-        data.append({
-            "username": user_obj.username,
-            "count": workout_count,
-            "bio": bio,
-            "location": location,
-        })
-
-    data.sort(key=lambda x: x["count"], reverse=True)
+    data = [
+        {
+            'username': p.user.username,
+            'score': p.score,
+            'bio': p.bio or None,
+            'location': p.location or None,
+        }
+        for p in top_profiles
+    ]
 
     return JsonResponse({"leaderboard": data})
