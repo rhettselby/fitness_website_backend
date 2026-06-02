@@ -14,26 +14,33 @@ import anthropic
 
 
 
-@shared_task
-def verify_workout_image(image_url: str, exercise: str, workout_type: str, workout_id: int, user_id: int) -> bool:
+@shared_task(bind=True, max_retries=3, default_retry_delay=30)
+def verify_workout_image(self, image_url: str, exercise: str, workout_type: str, workout_id: int, user_id: int) -> bool:
     print("image verification initiated")
-    client = anthropic.Anthropic()
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=256,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "url", "url": image_url}},
-                {"type": "text", "text": f"""
-                    Does this image provide at least minor evidence that the person in the photo had
-                    been performing {exercise}? Evidence could include the location, other people, signs of activity or anything that 
-                    might indicate the given workout. Please be somewhat leniant, return yes or no and a brief reasoning of your decision.
-                 """}
-            ]
-        }]
-    )
+    try:
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=256,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "url", "url": image_url}},
+                    {"type": "text", "text": f"""
+                        Does this image provide at least minor evidence that the person in the photo had
+                        been performing {exercise}? Evidence could include the location, other people, signs of activity or anything that
+                        might indicate the given workout. Please be somewhat leniant, return yes or no and a brief reasoning of your decision.
+                     """}
+                ]
+            }]
+        )
+    except Exception as exc:
+        print(f"Claude API error during image verification: {exc}")
+        raise self.retry(exc=exc)
+
     result = response.content[0].text.strip().lower()
+    print(f"Image verification result: {result}")
+
     if result.startswith("yes"):
         if workout_type == 'cardio':
             workout = Cardio.objects.get(id=workout_id)
@@ -42,16 +49,16 @@ def verify_workout_image(image_url: str, exercise: str, workout_type: str, worko
         elif workout_type == 'sport':
             workout = Sport.objects.get(id=workout_id)
         else:
-            print("Workout not found during image validation")
-            return True
+            print("Unknown workout type during image validation")
+            return False
+        workout.verified = True
         workout.score += 50
         workout.save()
         user = User.objects.get(id=user_id)
         user.profile.score += 50
         user.profile.save()
         return True
-    
-    print(result)
+
     return False
     
 
