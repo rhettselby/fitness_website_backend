@@ -918,7 +918,6 @@ def sync_whoop_for_user(user, days_back=30):
                 'refresh_token': connection.refresh_token,
                 'client_id': WHOOP_CLIENT_ID,
                 'client_secret': WHOOP_CLIENT_SECRET,
-                'redirect_uri': WHOOP_REDIRECT_URI,
             }
         )
         if token_response.status_code == 200:
@@ -930,7 +929,10 @@ def sync_whoop_for_user(user, days_back=30):
             print(f"Whoop token refreshed successfully for user {user.id}")
         else:
             print(f"Failed to refresh Whoop token: {token_response.status_code} - {token_response.text}")
-            raise Exception("Failed to refresh Whoop token")
+            # Mark inactive so we stop retrying every hour — user must reconnect
+            connection.is_active = False
+            connection.save()
+            raise Exception("Failed to refresh Whoop token — connection deactivated, user must reconnect")
 
     end_time = timezone.now()
     start_time = end_time - timedelta(days=days_back)
