@@ -20,7 +20,7 @@ def verify_workout_image(self, image_url: str, exercise: str, workout_type: str,
     try:
         client = anthropic.Anthropic()
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5",
             max_tokens=256,
             messages=[{
                 "role": "user",
@@ -34,6 +34,12 @@ def verify_workout_image(self, image_url: str, exercise: str, workout_type: str,
                 ]
             }]
         )
+    except anthropic.APIStatusError as exc:
+        print(f"Claude API error during image verification: {exc}")
+        # Don't retry permanent errors (bad model name, auth failures, etc.)
+        if exc.status_code in (400, 401, 403, 404):
+            return False
+        raise self.retry(exc=exc)
     except Exception as exc:
         print(f"Claude API error during image verification: {exc}")
         raise self.retry(exc=exc)
