@@ -69,8 +69,8 @@ def strava_points(activity, duration, speed):
         if activity.lower() in SPEED_INCLUDED:
             if speed and (duration > 10):
                 mile_minutes = 1609.344 / speed / 60
-                if mile_minutes < 10:
-                    multiplier = (10 - mile_minutes) ** .33
+                if mile_minutes < 9:
+                    multiplier = (9 - mile_minutes) ** .25
                     score += (multiplier * score)
     else:
         score = score // 2
@@ -83,9 +83,9 @@ def oura_points(activity, duration, intensity):
         score += duration
     if activity.lower() in INTENSITY_INCLUDED:
         if intensity == "moderate":
-            score *= 1.9
+            score *= 1.6
         elif intensity == "hard":
-            score *= 3.8
+            score *= 2.9
     if activity.lower() not in CARDIO:
         score = score // 2
     integer_score = int(score)

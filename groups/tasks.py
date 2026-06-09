@@ -11,6 +11,10 @@ def reset_scores():
 
 
 import anthropic
+import base64
+import mimetypes
+from django.conf import settings
+import os
 
 
 
@@ -18,6 +22,15 @@ import anthropic
 def verify_workout_image(self, image_url: str, exercise: str, workout_type: str, workout_id: int, user_id: int) -> bool:
     print("image verification initiated")
     try:
+        # image_url may be a relative media URL — read the file from disk instead
+        relative_path = image_url.lstrip('/')
+        if relative_path.startswith(settings.MEDIA_URL.lstrip('/')):
+            relative_path = relative_path[len(settings.MEDIA_URL.lstrip('/')):]
+        file_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+        with open(file_path, 'rb') as f:
+            image_data = base64.standard_b64encode(f.read()).decode('utf-8')
+        media_type = mimetypes.guess_type(file_path)[0] or 'image/jpeg'
+
         client = anthropic.Anthropic()
         response = client.messages.create(
             model="claude-opus-4-5",
@@ -25,7 +38,7 @@ def verify_workout_image(self, image_url: str, exercise: str, workout_type: str,
             messages=[{
                 "role": "user",
                 "content": [
-                    {"type": "image", "source": {"type": "url", "url": image_url}},
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_data}},
                     {"type": "text", "text": f"""
                         Does this image provide at least minor evidence that the person in the photo had
                         been performing {exercise}? Evidence could include the location, other people, signs of activity or anything that
