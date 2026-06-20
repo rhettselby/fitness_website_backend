@@ -29,7 +29,7 @@ def points(workout_type:str, activity:str, duration:float):
             points // 2
 
     elif workout_type == "gym":
-        points = points
+        points = 150
     
     elif workout_type == "sport":
         points = 100
