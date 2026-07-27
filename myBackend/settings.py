@@ -279,7 +279,13 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_ENABLE_UTC = True
-CELERY_TASK_IGNORE_RESULT = True 
+CELERY_TASK_IGNORE_RESULT = True
+
+# Recycle worker child processes so long-lived memory (e.g. image buffers that Python never
+# returns to the OS) can't accumulate. This is what keeps the worker's RAM flat instead of
+# plateauing at multiple GB.
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 50        # restart a child after 50 tasks
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = 300000   # KB (~300 MB): restart a child if it grows past this
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 

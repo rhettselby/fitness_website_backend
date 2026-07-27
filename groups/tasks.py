@@ -12,9 +12,10 @@ def reset_scores():
 
 import anthropic
 import base64
-import mimetypes
+import io
 from django.conf import settings
 import os
+from PIL import Image
 
 
 
@@ -27,9 +28,16 @@ def verify_workout_image(self, image_url: str, exercise: str, workout_type: str,
         if relative_path.startswith(settings.MEDIA_URL.lstrip('/')):
             relative_path = relative_path[len(settings.MEDIA_URL.lstrip('/')):]
         file_path = os.path.join(settings.MEDIA_ROOT, relative_path)
-        with open(file_path, 'rb') as f:
-            image_data = base64.standard_b64encode(f.read()).decode('utf-8')
-        media_type = mimetypes.guess_type(file_path)[0] or 'image/jpeg'
+        # Downscale before sending to the API: a smaller in-memory buffer and a smaller
+        # outbound payload cut worker RAM, network egress, and Anthropic token cost. Full
+        # resolution isn't needed to verify a workout.
+        with Image.open(file_path) as img:
+            img = img.convert('RGB')
+            img.thumbnail((1024, 1024))  # preserves aspect ratio, in place
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=80)
+        image_data = base64.standard_b64encode(buffer.getvalue()).decode('utf-8')
+        media_type = 'image/jpeg'
 
         client = anthropic.Anthropic()
         response = client.messages.create(
