@@ -12,6 +12,7 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
+from notifications.tasks import send_comment_notification
 import cloudinary.uploader
 from groups.tasks import verify_workout_image
 
@@ -370,7 +371,14 @@ def add_comment_api_jwt(request):
             content_type=ct,
             object_id=workout_id,
         )
-    
+
+        # Fire-and-forget: email the workout owner (weekly-throttled). Never let a broker
+        # hiccup break comment creation.
+        try:
+            send_comment_notification.delay(comment.id)
+        except Exception as e:
+            print(f"Failed to enqueue comment notification: {e}")
+
         return JsonResponse({
             "success": True,
             "comment": {

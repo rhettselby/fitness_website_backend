@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'wearables',
     'django_celery_beat',
     'groups',
+    'notifications',
     'cloudinary_storage',
     'cloudinary',
 ]
@@ -291,7 +292,33 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'groups.tasks.reset_scores',
         'schedule': crontab(minute=0, hour=8, day_of_week=1),  # Monday 12am PST = 8am UTC
     },
+    'monthly-workout-reminder': {
+        'task': 'notifications.tasks.send_monthly_reminders',
+        'schedule': crontab(minute=0, hour=16, day_of_month=1),  # 1st of month, 9am PST = 16 UTC
+    },
 }
+
+
+### EMAIL
+# Standard Django email over SMTP. Falls back to the console backend locally (when EMAIL_HOST
+# is unset) so development just prints emails to the worker/server log — no credentials needed.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.smtp.EmailBackend' if os.environ.get('EMAIL_HOST')
+    else 'django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL',
+    "Rhett's Fitness Community <no-reply@rhetts-fitness-community.com>"
+)
+
+# Public base URL used to build links inside emails (unsubscribe, "view on your profile").
+SITE_URL = os.environ.get('SITE_URL', 'https://www.rhetts-fitness-community.com')
 
 
 CLOUDINARY_STORAGE = {

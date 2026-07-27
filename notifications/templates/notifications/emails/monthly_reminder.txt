@@ -1,0 +1,11 @@
+{% autoescape off %}Hi {{ username }},
+
+It's a new month — a fresh start. Log your workouts, keep your streak alive, and see how you stack up against the community.
+
+Log a workout: {{ site_url }}
+
+— Rhett's Fitness Community
+------------------------------------------------------------------
+You're getting this monthly reminder because you're a member.
+Unsubscribe from all emails: {{ unsubscribe_url }}
+{% endautoescape %}

@@ -1,0 +1,14 @@
+{% autoescape off %}Hi {{ username }},
+
+{{ commenter }} just commented on your {{ workout_type }} workout:
+
+    "{{ comment_text }}"
+
+See it on your profile: {{ site_url }}
+
+Keep it up!
+— Rhett's Fitness Community
+------------------------------------------------------------------
+You're getting this because someone commented on your workout — we send this at most once a week.
+Unsubscribe from all emails: {{ unsubscribe_url }}
+{% endautoescape %}

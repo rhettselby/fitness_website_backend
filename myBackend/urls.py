@@ -63,6 +63,8 @@ urlpatterns = [
     #wearables
     path('api/wearables/', include('wearables.urls')),
 
+    #email notification unsubscribe (public, token-based)
+    path('notifications/', include('notifications.urls')),
 
 ]
 
