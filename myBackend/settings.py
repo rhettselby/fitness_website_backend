@@ -300,7 +300,7 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_BEAT_SCHEDULE = {
     'sync-wearables-every-hour': {
         'task': 'wearables.tasks.sync_all_wearables',
-        'schedule': crontab(minute=0), # top of every hour
+        'schedule': crontab(minute='*/15'), # top of every hour
     },
     'reset_score': {
         'task': 'groups.tasks.reset_scores',
