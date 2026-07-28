@@ -287,12 +287,20 @@ CELERY_TASK_IGNORE_RESULT = True
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 50        # restart a child after 50 tasks
 CELERY_WORKER_MAX_MEMORY_PER_CHILD = 300000   # KB (~300 MB): restart a child if it grows past this
 
+# Cap the number of worker processes. Celery otherwise defaults concurrency to the DETECTED
+# CPU count — on Railway that's the HOST's core count (48!), not your container's, so it was
+# forking 48 full Django processes. That was essentially the entire RAM bill and 48x the log
+# chatter. Pin it low; these tasks are I/O-bound (API calls), so a few processes is plenty.
+CELERY_WORKER_CONCURRENCY = 4
+
+# Schedules are managed in the database (Supabase django_celery_beat_* tables), editable via
+# the Django admin. CELERY_BEAT_SCHEDULE below only seeds new entries on first startup.
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 CELERY_BEAT_SCHEDULE = {
     'sync-wearables-every-hour': {
         'task': 'wearables.tasks.sync_all_wearables',
-        'schedule': crontab(hour='*/1'),
+        'schedule': crontab(minute=0), # top of every hour
     },
     'reset_score': {
         'task': 'groups.tasks.reset_scores',

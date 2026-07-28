@@ -38,24 +38,31 @@ def send_comment_notification(comment_id):
 
     # Never email someone about their own comment.
     if owner.id == commenter.id:
+        print(f"[comment-email] skip: {owner.username} commented on their own workout (comment {comment_id})")
         return
 
     if not owner.email:
+        print(f"[comment-email] skip: owner {owner.username} has no email address")
         return
 
     profile = getattr(owner, 'profile', None)
-    if profile is None or not profile.email_notifications:
+    if profile is None:
+        print(f"[comment-email] skip: owner {owner.username} has no profile")
+        return
+    if not profile.email_notifications:
+        print(f"[comment-email] skip: {owner.username} is unsubscribed (email_notifications=False)")
         return
 
     # Weekly throttle: skip if we already emailed this user within the cooldown window.
     if profile.last_comment_email_at and \
             timezone.now() - profile.last_comment_email_at < COMMENT_EMAIL_COOLDOWN:
+        print(f"[comment-email] skip: throttled — last emailed {owner.username} at {profile.last_comment_email_at}")
         return
 
     text = comment.text or ""
     preview = text if len(text) <= 150 else text[:150].rstrip() + "…"
 
-    send_templated_email(
+    sent = send_templated_email(
         owner,
         subject=f"{commenter.username} commented on your workout",
         template_name="comment_notification",
@@ -66,8 +73,12 @@ def send_comment_notification(comment_id):
         },
     )
 
-    profile.last_comment_email_at = timezone.now()
-    profile.save(update_fields=["last_comment_email_at"])
+    if sent:
+        profile.last_comment_email_at = timezone.now()
+        profile.save(update_fields=["last_comment_email_at"])
+        print(f"[comment-email] sent to {owner.email} for comment {comment_id}")
+    else:
+        print(f"[comment-email] send skipped: {owner.username} has no email (send_templated_email returned False)")
 
 
 @shared_task
