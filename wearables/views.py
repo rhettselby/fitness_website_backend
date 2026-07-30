@@ -941,7 +941,7 @@ def sync_whoop_for_user(user, days_back=30):
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
     response = requests.get(
-        f'https://api.prod.whoop.com/developer/v1/activity/workout?start={start_date}&end={end_date}',
+        f'https://api.prod.whoop.com/developer/v2/activity/workout?start={start_date}&end={end_date}',
         headers=headers
     )
 
@@ -953,9 +953,17 @@ def sync_whoop_for_user(user, days_back=30):
     workouts_added = 0
 
     for workout in data.get('records', []):
+        # The id map is authoritative: it normalizes Whoop's sports onto the
+        # taxonomy CARDIO/EXCLUDED_ACTIVITIES match against. v2 also sends a
+        # display-form sport_name ("Jump Rope"), used for ids we don't map yet.
         sport_id = workout.get('sport_id')
-        sport_name = WHOOP_SPORT_IDS.get(sport_id, f"Sport {sport_id}")
-        activity_lower = sport_name.lower()
+        sport_name = (
+            WHOOP_SPORT_IDS.get(sport_id)
+            or workout.get('sport_name')
+            or f"Sport {sport_id}"
+        )
+        # Those lists hold squashed single tokens ("jumprope"), so match on that form
+        activity_lower = sport_name.lower().replace(' ', '')
 
         whoop_workout_id = str(workout.get('id'))
         workout_start = workout.get('start')
@@ -1078,7 +1086,7 @@ def whoop_connect(request):
         f"client_id={WHOOP_CLIENT_ID}&"
         f"redirect_uri={WHOOP_REDIRECT_URI}&"
         f"response_type=code&"
-        f"scope=read:workout%20offline&"
+        f"scope=read:profile%20read:workout%20offline&"
         f"state={state}"
     )
     
@@ -1156,7 +1164,7 @@ def whoop_callback(request):
         if not whoop_user_id:
             try:
                 profile_resp = requests.get(
-                    'https://api.prod.whoop.com/developer/v1/user/profile/basic',
+                    'https://api.prod.whoop.com/developer/v2/user/profile/basic',
                     headers={'Authorization': f'Bearer {token_data["access_token"]}'}
                 )
                 if profile_resp.status_code == 200:
