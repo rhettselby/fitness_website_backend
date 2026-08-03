@@ -1,3 +1,4 @@
+from django.db.models import Count
 from django.http import JsonResponse
 from django.shortcuts import render
 
@@ -92,9 +93,13 @@ def recent_workouts_api(request):
     try:
         user = get_user_from_token(request)
         # Get recent cardio and gym workouts
-        cardio = Cardio.objects.select_related('user').order_by('-date')[:10]
-        gym = Gym.objects.select_related('user').order_by('-date')[:10]
-        sport = Sport.objects.select_related('user').order_by('-date')[:10]
+        # annotate _comment_count so comment_count doesn't fire a COUNT per row
+        cardio = Cardio.objects.select_related('user').annotate(
+            _comment_count=Count('comments')).order_by('-date')[:10]
+        gym = Gym.objects.select_related('user').annotate(
+            _comment_count=Count('comments')).order_by('-date')[:10]
+        sport = Sport.objects.select_related('user').annotate(
+            _comment_count=Count('comments')).order_by('-date')[:10]
         
         workout_list = []
         

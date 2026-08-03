@@ -70,7 +70,8 @@ def get_leaderboard(request, group_id):
             return JsonResponse({"error": "Group not found"}, status = 404)
 
 
-        members = group.members.all()
+        # select_related('profile') pulls each member's score in the same query
+        members = group.members.all().select_related('profile')
 
         result = {}
         for member in members:

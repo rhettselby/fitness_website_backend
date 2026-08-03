@@ -413,9 +413,9 @@ def get_comments_api(request, workout_type, workout_id):
         ct = ContentType.objects.get_for_model(workout)
         
         comments = Comment.objects.filter(
-            content_type=ct, 
+            content_type=ct,
             object_id=workout.id
-        ).order_by('-created_at')
+        ).select_related('user').order_by('-created_at')
         
         comments_data = [{
             "id": comment.id,

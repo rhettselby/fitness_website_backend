@@ -30,6 +30,10 @@ class Workout(models.Model):
     
     @property
     def comment_count(self):
+        # Listing views annotate _comment_count so the whole page costs one query
+        # instead of a COUNT per workout. Single-object callers fall through.
+        if hasattr(self, '_comment_count'):
+            return self._comment_count
         return self.comments.count()
     verified = models.BooleanField(default = False)
 
