@@ -1089,19 +1089,26 @@ def sync_whoop_for_user(user, days_back=30):
         workout_score = workout.get('score') or {}
         intensity = workout_score.get('strain') or 0
         score = whoop_points(activity_lower, duration_minutes, intensity)
+        existing_cardio = Cardio.objects.filter(user=user, date=workout_start).first()
+        existing_sport = Sport.objects.filter(user=user, date=workout_start).first()
 
         if activity_lower in CARDIO or activity_lower in EXCLUDED_ACTIVITIES:
             # Duplicate prevention: same user + same start time
-            existing = Cardio.objects.filter(user=user, date=workout_start).first()
-            if existing:
-                if duration_minutes > existing.duration:
-                    existing.duration = duration_minutes
-                    existing.activity = f"Whoop: {sport_name}"
-                    existing.external_id = f"whoop_{whoop_workout_id}"
-                    existing.save()
-                    print(f"Updated Whoop workout to longer duration: {duration_minutes} min")
+           
+            if existing_cardio:
+                if duration_minutes > existing_cardio.duration:
+                    existing_cardio.duration = duration_minutes
+                    existing_cardio.activity = f"Whoop: {sport_name}"
+                    existing_cardio.external_id = f"whoop_{whoop_workout_id}"
+                    existing_cardio.save()
+                    print(f"Updated Whoop Cardio Workout to longer duration: {duration_minutes} min")
                 else:
-                    print("Skipping shorter duplicate Whoop workout")
+                    print("Skipping shorter duplicate Whoop Cardio Workout")
+                continue
+            
+            #duplicate sport workout already exists (Whoop bug)
+            elif existing_sport:
+                print("Skipping duplicate Cardio workout, Sport already exists")
                 continue
 
             _, created = Cardio.objects.get_or_create(
@@ -1119,17 +1126,23 @@ def sync_whoop_for_user(user, days_back=30):
                 user.profile.score += score
                 user.profile.save()
                 print(f"User {user} logged {score} Whoop points.")
+
         else:
-            existing = Sport.objects.filter(user=user, date=workout_start).first()
-            if existing:
-                if duration_minutes > existing.duration:
-                    existing.duration = duration_minutes
-                    existing.sport = f"Whoop: {sport_name}"
-                    existing.external_id = f"whoop_{whoop_workout_id}"
-                    existing.save()
+            #duplicate sport exists
+            if existing_sport:
+                if duration_minutes > existing_sport.duration:
+                    existing_sport.duration = duration_minutes
+                    existing_sport.sport = f"Whoop: {sport_name}"
+                    existing_sport.external_id = f"whoop_{whoop_workout_id}"
+                    existing_sport.save()
                     print(f"Updated Whoop sport workout to longer duration: {duration_minutes} min")
                 else:
                     print("Skipping shorter duplicate Whoop sport workout")
+                continue
+
+            #Duplicate cardio already exists
+            elif existing_cardio:
+                print("Skipping duplicate Sport workout, Cardio already exists")
                 continue
 
             _, created = Sport.objects.get_or_create(
