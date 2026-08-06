@@ -53,12 +53,30 @@ def get_user_from_token(request):
         return None
 
 ##### Calculating Points Helper Function #####
-EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking"]
+# Whoop names are normalised to alphanumerics only, so its "Hiking/Rucking" arrives as
+# "hikingrucking" and "Track & Field" as "trackfield" — hence the squashed spellings below.
+EXCLUDED_ACTIVITIES = ["walk", "walking", "hike", "hiking", "hikingrucking",
+                       # Whoop logs recovery/lifestyle activities as workouts too
+                       "sauna", "icebath", "meditation", "gaming"]
 CARDIO = ["run", "running", "virtualrun", "trailrun", "cycling", "swimming",
            "yoga", "strength_training", "ride", "rowing", "virtualrow",
            "pilates", "hiit", "stairstepper", "crossfit", "jumprope", "skating", "fitnessclass", "strengthtraining"]
 SPEED_INCLUDED = ["run", "running", "virtualrun", "trailrun"]
-INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strength_training","soccer", "basketball","tennis", "strengthtraining"]
+INTENSITY_INCLUDED = ["running", "cycling", "swimming","yoga", "dance", "strength_training","soccer", "basketball","tennis", "strengthtraining",
+           # Whoop sport names where a strain / heart-rate reading is meaningful
+           "assaultbike", "australianfootball", "badminton", "barre", "barre3", "barrys",
+           "baseball", "boxfitness", "boxing", "circusarts", "climber", "cricket",
+           "crosscountryskiing", "duathlon", "elliptical", "f45training", "fencing", "fieldhockey",
+           "football", "functionalfitness", "gaelicfootball", "gymnastics", "handball", "hiit",
+           "hotyoga", "hurlingcamogie", "icehockey", "iceskating", "inlineskating", "jiujitsu",
+           "jumpingrope", "kayaking", "kickboxing", "kiteboarding", "lacrosse", "martialarts",
+           "mountainbiking", "netball", "obstaclecourseracing", "paddleboarding", "paddletennis",
+           "padel", "paintball", "parkour", "pickleball", "pilates", "polo", "powerlifting",
+           "rockclimbing", "rowing", "rugby", "skiing", "snowboarding", "softball", "spikeball",
+           "spin", "squash", "stadiumsteps", "stairmaster", "strengthtrainer",
+           "strollerjogging", "surfing", "tabletennis", "trackfield", "triathlon", "ultimate",
+           "volleyball", "wakeboarding", "waterpolo", "waterskiing", "weightlifting",
+           "wheelchairpushing", "wrestling"]
 
 def strava_points(activity, duration, speed):
     score = 100
@@ -67,13 +85,14 @@ def strava_points(activity, duration, speed):
     if activity.lower() in CARDIO:
         score += duration
         if activity.lower() in SPEED_INCLUDED:
+            #strava lacks intensity, must derive from avg speed
             if speed and (duration > 10):
                 mile_minutes = 1609.344 / speed / 60
                 if mile_minutes < 9:
                     multiplier = (9 - mile_minutes) ** .25
                     score += (multiplier * score)
     else:
-        score = score // 2
+        score = score / 2
     integer_score = int(score)
     return integer_score
 
@@ -82,14 +101,31 @@ def oura_points(activity, duration, intensity):
     if activity.lower() not in EXCLUDED_ACTIVITIES:
         score += duration
     if activity.lower() in INTENSITY_INCLUDED:
+        #oura provides intensity (easy, medium, hard)
         if intensity == "moderate":
             score *= 1.6
         elif intensity == "hard":
             score *= 2.9
     if activity.lower() not in CARDIO:
-        score = score // 2
+        score = score / 2
     integer_score = int(score)
     return integer_score
+
+
+def whoop_points(activity, duration, intensity):
+    score = 100
+    if activity.lower() not in EXCLUDED_ACTIVITIES:
+        score += duration
+    if activity.lower() in INTENSITY_INCLUDED:
+       #whoop gives intensity as strain (0-21), already factoring in duration
+       #hence decision to add bonus, instead of multiply
+       if intensity:
+        score += intensity * 10
+    if activity.lower() not in CARDIO:
+        score = score / 2
+    integer_score = int(score)
+    return integer_score
+
 
 @csrf_exempt
 def oura_connect(request):
@@ -808,7 +844,8 @@ def strava_disconnect(request):
     ################WHOOP###################################
 
 
-##### Whoop sport ID → human-readable name mapping
+##### Whoop sport ID -> human-readable name mapping
+
 WHOOP_SPORT_IDS = {
     -1: "Activity",
     0: "Running",
@@ -816,58 +853,123 @@ WHOOP_SPORT_IDS = {
     16: "Baseball",
     17: "Basketball",
     18: "Rowing",
+    19: "Fencing",
+    20: "Field Hockey",
     21: "Football",
     22: "Golf",
     24: "Ice Hockey",
     25: "Lacrosse",
-    27: "Obstacle Course",
-    28: "Strengthtraining",
-    29: "Strengthtraining",
-    32: "Soccer",
-    33: "Softball",
-    34: "Squash",
-    35: "Swimming",
-    36: "Tennis",
-    37: "Running",
-    38: "Volleyball",
-    39: "Water Polo",
-    41: "Boxing",
+    27: "Rugby",
+    28: "Sailing",
+    29: "Skiing",
+    30: "Soccer",
+    31: "Softball",
+    32: "Squash",
+    33: "Swimming",
+    34: "Tennis",
+    35: "Track & Field",
+    36: "Volleyball",
+    37: "Water Polo",
+    38: "Wrestling",
+    39: "Boxing",
     42: "Dance",
-    44: "Martial Arts",
-    45: "Yoga",
-    46: "Meditation",
-    47: "Other",
-    48: "Crossfit",
-    49: "Running",
+    43: "Pilates",
+    44: "Yoga",
+    45: "Weightlifting",
+    47: "Cross Country Skiing",
+    48: "Functional Fitness",
+    49: "Duathlon",
     51: "Gymnastics",
-    52: "Hiking",
+    52: "Hiking/Rucking",
     53: "Horseback Riding",
     55: "Kayaking",
-    57: "Paddleboarding",
-    58: "Pilates",
-    59: "Rock Climbing",
-    60: "Rowing",
-    61: "Skating",
-    62: "Skiing",
-    63: "Snowboarding",
-    65: "Stairstepper",
-    66: "Surfing",
-    70: "Walking",
-    72: "Strengthtraining",
-    74: "Cycling",
-    82: "Hiit",
-    83: "Jumprope",
+    56: "Martial Arts",
+    57: "Mountain Biking",
+    59: "Powerlifting",
+    60: "Rock Climbing",
+    61: "Paddleboarding",
+    62: "Triathlon",
+    63: "Walking",
+    64: "Surfing",
+    65: "Elliptical",
+    66: "Stairmaster",
+    70: "Meditation",
+    71: "Other",
+    73: "Diving",
+    74: "Operations - Tactical",
+    75: "Operations - Medical",
+    76: "Operations - Flying",
+    77: "Operations - Water",
+    82: "Ultimate",
+    83: "Climber",
+    84: "Jumping Rope",
+    85: "Australian Football",
+    86: "Skateboarding",
+    87: "Coaching",
+    88: "Ice Bath",
+    89: "Commuting",
+    90: "Gaming",
+    91: "Snowboarding",
+    92: "Motocross",
+    93: "Caddying",
+    94: "Obstacle Course Racing",
+    95: "Motor Racing",
+    96: "HIIT",
+    97: "Spin",
+    98: "Jiu Jitsu",
+    99: "Manual Labor",
+    100: "Cricket",
+    101: "Pickleball",
+    102: "Inline Skating",
+    103: "Box Fitness",
+    104: "Spikeball",
+    105: "Wheelchair Pushing",
+    106: "Paddle Tennis",
+    107: "Barre",
+    108: "Stage Performance",
+    109: "High Stress Work",
+    110: "Parkour",
+    111: "Gaelic Football",
+    112: "Hurling/Camogie",
+    113: "Circus Arts",
+    121: "Massage Therapy",
+    123: "Strength Trainer",
+    125: "Watching Sports",
+    126: "Assault Bike",
+    127: "Kickboxing",
+    128: "Stretching",
+    230: "Table Tennis",
+    231: "Badminton",
+    232: "Netball",
+    233: "Sauna",
+    234: "Disc Golf",
+    235: "Yard Work",
+    236: "Air Compression",
+    237: "Percussive Massage",
+    238: "Paintball",
+    239: "Ice Skating",
+    240: "Handball",
+    248: "F45 Training",
+    249: "Padel",
+    250: "Barry's",
+    251: "Dedicated Parenting",
+    252: "Stroller Walking",
+    253: "Stroller Jogging",
+    254: "Toddlerwearing",
+    255: "Babywearing",
+    258: "Barre3",
+    259: "Hot Yoga",
+    261: "Stadium Steps",
+    262: "Polo",
+    263: "Musical Performance",
+    264: "Kite Boarding",
+    266: "Dog Walking",
+    267: "Water Skiing",
+    268: "Wakeboarding",
+    269: "Cooking",
+    270: "Cleaning",
+    272: "Public Speaking",
 }
-
-# Whoop strain is 0–21; map to intensity buckets used by oura_points
-def _whoop_strain_to_intensity(strain):
-    if strain is None:
-        return "easy"
-    if strain >= 18:
-        return "hard"
-    if strain >= 14:
-        return "moderate"
-    return "easy"
 
 
 ##### validate whoop signature (required for webhooks)
@@ -896,7 +998,7 @@ def validate_whoop_signature(request):
 
 
 
-####Automatic Adding Workouts ###
+####Automatic Add Workouts ###
 def sync_whoop_for_user(user, days_back=30):
     try:
         connection = WearableConnection.objects.get(
@@ -953,17 +1055,17 @@ def sync_whoop_for_user(user, days_back=30):
     workouts_added = 0
 
     for workout in data.get('records', []):
-        # The id map is authoritative: it normalizes Whoop's sports onto the
-        # taxonomy CARDIO/EXCLUDED_ACTIVITIES match against. v2 also sends a
-        # display-form sport_name ("Jump Rope"), used for ids we don't map yet.
+        # sport_id is deprecated in v2, so the map only covers payloads that still send
+        # it; sport_name is the required field and carries the same display names.
         sport_id = workout.get('sport_id')
         sport_name = (
             WHOOP_SPORT_IDS.get(sport_id)
             or workout.get('sport_name')
             or f"Sport {sport_id}"
         )
-        # Those lists hold squashed single tokens ("jumprope"), so match on that form
-        activity_lower = sport_name.lower().replace(' ', '')
+        # CARDIO/EXCLUDED_ACTIVITIES/INTENSITY_INCLUDED hold squashed single tokens, so
+        # drop everything but alphanumerics: "Hiking/Rucking" -> "hikingrucking"
+        activity_lower = ''.join(c for c in sport_name.lower() if c.isalnum())
 
         whoop_workout_id = str(workout.get('id'))
         workout_start = workout.get('start')
@@ -984,9 +1086,9 @@ def sync_whoop_for_user(user, days_back=30):
             print(f"Skipping short Whoop {sport_name} ({duration_minutes} min)")
             continue
 
-        strain = (workout.get('score') or {}).get('strain')
-        intensity = _whoop_strain_to_intensity(strain)
-        score = oura_points(activity_lower, duration_minutes, intensity)
+        workout_score = workout.get('score') or {}
+        intensity = workout_score.get('strain') or 0
+        score = whoop_points(activity_lower, duration_minutes, intensity)
 
         if activity_lower in CARDIO or activity_lower in EXCLUDED_ACTIVITIES:
             # Duplicate prevention: same user + same start time
