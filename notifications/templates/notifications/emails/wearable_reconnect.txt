@@ -1,0 +1,13 @@
+{% autoescape off %}Hi {{ username }},
+
+{{ provider }} stopped accepting our connection to your account, so your {{ provider }} workouts are no longer syncing to Rhett's Fitness Community. This usually happens when {{ provider }} rotates or revokes the access it gave us — nothing you did wrong.
+
+Re-link {{ provider }} in a few seconds here: {{ connect_url }}
+
+Once it's re-linked, new workouts will sync automatically again.
+
+— Rhett's Fitness Community
+------------------------------------------------------------------
+You're getting this because a device you linked stopped syncing.
+Unsubscribe from all emails: {{ unsubscribe_url }}
+{% endautoescape %}

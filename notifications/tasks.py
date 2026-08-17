@@ -4,15 +4,19 @@
   throttled to at most one email per recipient per 7 days.
 - ``send_monthly_reminders`` / ``send_monthly_reminder_email``: fan-out monthly
   reminder to every opted-in user with an email address.
+- ``send_wearable_reconnect_email``: tells a user their Whoop/Oura/Strava link was
+  switched off (the provider kept rejecting our refresh token) and must be re-linked.
 """
 
 from datetime import timedelta
 
 from celery import shared_task
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.utils import timezone
 
 from fitness.models import Comment
+from wearables.models import WearableConnection
 from .emails import send_templated_email
 
 # At most one comment-notification email per recipient per week ("not annoying").
@@ -120,3 +124,38 @@ def send_monthly_reminder_email(user_id):
         subject="Time to log your workouts 💪",
         template_name="monthly_reminder",
     )
+
+
+@shared_task
+def send_wearable_reconnect_email(user_id, device_type):
+    """Tell a user their wearable link was switched off and needs to be re-linked.
+
+    Queued by ``wearables.views.ensure_fresh_token`` when a provider has definitively
+    rejected our refresh token several times in a row. Without this the connection used
+    to go silent and nobody found out for days.
+    """
+    try:
+        user = User.objects.select_related('profile').get(id=user_id)
+    except User.DoesNotExist:
+        return
+
+    provider = dict(WearableConnection.DEVICE_CHOICES).get(device_type, device_type.title())
+
+    if not user.email:
+        print(f"[reconnect-email] skip: {user.username} ({provider}) has no email address")
+        return
+    profile = getattr(user, 'profile', None)
+    if profile is None or not profile.email_notifications:
+        print(f"[reconnect-email] skip: {user.username} ({provider}) is unsubscribed")
+        return
+
+    send_templated_email(
+        user,
+        subject=f"Your {provider} connection needs to be re-linked",
+        template_name="wearable_reconnect",
+        context={
+            "provider": provider,
+            "connect_url": f"{settings.SITE_URL.rstrip('/')}/connect",
+        },
+    )
+    print(f"[reconnect-email] sent to {user.email} for {provider}")

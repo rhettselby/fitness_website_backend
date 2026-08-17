@@ -292,14 +292,19 @@ CELERY_WORKER_MAX_MEMORY_PER_CHILD = 300000   # KB (~300 MB): restart a child if
 # chatter. Pin it low; these tasks are I/O-bound (API calls), so a few processes is plenty.
 CELERY_WORKER_CONCURRENCY = 4
 
-# Schedules are managed in the database (Supabase django_celery_beat_* tables), editable via
-# the Django admin. CELERY_BEAT_SCHEDULE below only seeds new entries on first startup.
+# Schedules live in the database (django_celery_beat_* tables) and are visible in the Django
+# admin, but every time the Beat service starts django_celery_beat re-applies the entries
+# below (update_or_create by name) — so change schedules HERE and redeploy Beat; an admin
+# edit to one of these named entries is overwritten on the next Beat restart.
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 CELERY_BEAT_SCHEDULE = {
     'sync-wearables-every-hour': {
         'task': 'wearables.tasks.sync_all_wearables',
-        'schedule': crontab(minute='*/15'), # top of every hour
+        # Every 15 minutes, deliberately OFF the quarter-hour. OAuth token refreshes happen
+        # on whichever tick first sees an expired token, and Whoop's token endpoint is slow /
+        # returns 502s right on the hour (Aug 2026), which cost us every Whoop connection.
+        'schedule': crontab(minute='7,22,37,52'),
     },
     'reset_score': {
         'task': 'groups.tasks.reset_scores',

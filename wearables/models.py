@@ -17,6 +17,10 @@ class WearableConnection (models.Model):
     last_sync = models.DateTimeField(null = True, blank = True)
     updated_at = models.DateTimeField(auto_now = True)
     external_user_id = models.CharField(max_length=100, null=True, blank=True)
+    # Consecutive times the provider definitively rejected our refresh token. Reset to 0 on
+    # a successful refresh; the connection is deactivated once it reaches
+    # views.REFRESH_FAILURE_LIMIT. Transient errors (5xx, timeouts) never count.
+    refresh_failures = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         unique_together = ['user', 'device_type']

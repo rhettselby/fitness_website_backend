@@ -6,6 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
+from django.db import transaction
 import os
 from datetime import timedelta
 from .models import WearableConnection
@@ -51,6 +52,189 @@ def get_user_from_token(request):
         return User.objects.get(id=user_id)
     except (InvalidToken, TokenError, User.DoesNotExist):
         return None
+
+
+##### OAuth token refresh (shared by Oura / Strava / Whoop) #####
+#
+# All three providers rotate refresh tokens: every refresh returns a new refresh_token and
+# invalidates the previous one, and Whoop (ORY Hydra) treats re-use of an old one as theft
+# and revokes the whole grant. Two things went wrong with the old inline refresh blocks:
+#   * any non-200 from the token endpoint was treated as final. Whoop's endpoint returns
+#     transient 502s / very slow responses around hourly boundaries and Oura's 504s at
+#     00:00 UTC, so a single blip permanently deactivated the connection (Whoop) or left it
+#     retrying a dead token every 15 minutes forever (Oura). Now only a run of definitive
+#     OAuth rejections deactivates; transient failures simply retry on the next sync.
+#   * `connection.save()` wrote every column, so an overlapping sync (webhook in the web
+#     process + periodic task in the worker) could clobber freshly rotated tokens with
+#     stale ones. The refresh now runs under a row lock and saves only the token fields.
+
+REQUEST_TIMEOUT = (5, 20)                       # (connect, read) seconds for provider data calls
+# Token endpoints get more read headroom: Whoop's has been measured at 6-18s around the
+# hour, and giving up while it is mid-rotation is exactly how a refresh token gets desynced.
+TOKEN_REQUEST_TIMEOUT = (5, 40)
+REFRESH_EXPIRY_BUFFER = timedelta(minutes=2)    # refresh a little early instead of racing expiry
+REFRESH_FAILURE_LIMIT = 3                       # consecutive definitive rejections before deactivating
+
+TRANSIENT, CONFIG_ERROR, TOKEN_REJECTED = 'transient', 'config', 'token'
+
+
+class TokenRefreshError(Exception):
+    """Raised when no usable access token could be obtained.
+
+    ``deactivated`` is True when the connection was switched off as a result and the
+    user has to re-link the device; otherwise the next sync will simply try again.
+    """
+
+    def __init__(self, message, deactivated=False):
+        super().__init__(message)
+        self.deactivated = deactivated
+
+
+def token_needs_refresh(connection):
+    return bool(connection.expires_at) and \
+        timezone.now() >= connection.expires_at - REFRESH_EXPIRY_BUFFER
+
+
+def mark_token_expired(connection):
+    """Force a refresh on the next sync (used when the API rejects a token we thought was valid)."""
+    connection.expires_at = timezone.now()
+    connection.save(update_fields=['expires_at', 'updated_at'])
+
+
+def classify_refresh_failure(response):
+    """Sort a non-200 token-endpoint response into TRANSIENT, CONFIG_ERROR or TOKEN_REJECTED.
+
+    TRANSIENT       -> gateway/rate-limit/5xx or a non-JSON body: retry next sync, don't count.
+    CONFIG_ERROR    -> the provider rejected OUR client credentials or request shape
+                       (invalid_client & co.). Deactivating users would be wrong: fix the app.
+    TOKEN_REJECTED  -> a proper OAuth error about the grant itself (invalid_grant,
+                       invalid_request for a used/rotated token, Strava's bad refresh_token).
+    """
+    status = response.status_code
+    if status == 429 or status >= 500:
+        return TRANSIENT
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        return TRANSIENT            # HTML from a proxy/CDN, not an OAuth answer
+    error = str(body.get('error') or '')
+    if error in ('invalid_client', 'unauthorized_client', 'invalid_scope', 'unsupported_grant_type'):
+        return CONFIG_ERROR
+    # Strava: {"message": "Authorization Error", "errors": [{"resource": "Application", "field": "client_id", ...}]}
+    for item in body.get('errors') or []:
+        if isinstance(item, dict) and item.get('field') in ('client_id', 'client_secret'):
+            return CONFIG_ERROR
+    return TOKEN_REJECTED
+
+
+def _notify_reconnect_needed(connection):
+    """Queue the 'please re-link your device' email; never let that failing mask the sync error."""
+    try:
+        from notifications.tasks import send_wearable_reconnect_email
+        send_wearable_reconnect_email.delay(connection.user_id, connection.device_type)
+    except Exception as exc:
+        logger.error("Could not queue reconnect email for user %s (%s): %s",
+                     connection.user_id, connection.device_type, exc)
+
+
+def ensure_fresh_token(connection, token_url, client_id, client_secret, provider_label, extra_data=None):
+    """Return ``connection`` with a usable access token, refreshing it if it is (about to be) expired.
+
+    Raises TokenRefreshError when no usable token could be obtained. The returned instance
+    may be a different object than the one passed in (the row re-read under lock), so
+    callers must use the return value.
+    """
+    if not token_needs_refresh(connection):
+        return connection
+    if not client_id or not client_secret:
+        raise TokenRefreshError(
+            f"{provider_label} client credentials are not configured — check the "
+            f"{provider_label.upper()}_CLIENT_ID / _CLIENT_SECRET env vars")
+
+    outcome, detail, deactivated = None, '', False
+    with transaction.atomic():
+        # Row lock: an overlapping sync (webhook + periodic task) waits here and then finds
+        # the token we just stored instead of refreshing (and thereby burning) it again.
+        locked = WearableConnection.objects.select_for_update().get(pk=connection.pk)
+        if not locked.is_active:
+            raise TokenRefreshError(f"{provider_label} connection was deactivated by another sync",
+                                    deactivated=True)
+        if not token_needs_refresh(locked):
+            print(f"{provider_label} token for user {locked.user_id} was already refreshed by another sync")
+            return locked
+
+        print(f"Refreshing expired {provider_label} token for user {locked.user_id}")
+        data = {
+            'grant_type': 'refresh_token',
+            'refresh_token': locked.refresh_token,
+            'client_id': client_id,
+            'client_secret': client_secret,
+        }
+        if extra_data:
+            data.update(extra_data)
+        try:
+            response = requests.post(
+                token_url,
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                data=data,
+                timeout=TOKEN_REQUEST_TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            # Nothing was written; leaving the block rolls back and releases the lock.
+            logger.warning("%s token endpoint unreachable for user %s (%s) — will retry next sync",
+                           provider_label, locked.user_id, exc)
+            raise TokenRefreshError(f"{provider_label} token endpoint unreachable: {exc}") from exc
+
+        if response.status_code == 200:
+            token_data = response.json()
+            locked.access_token = token_data['access_token']
+            # A provider may omit refresh_token when it didn't rotate; keep the current one then.
+            locked.refresh_token = token_data.get('refresh_token') or locked.refresh_token
+            locked.expires_at = timezone.now() + timedelta(seconds=int(token_data.get('expires_in', 3600)))
+            locked.refresh_failures = 0
+            locked.save(update_fields=['access_token', 'refresh_token', 'expires_at',
+                                       'refresh_failures', 'updated_at'])
+            print(f"{provider_label} token refreshed successfully for user {locked.user_id}")
+            return locked
+
+        outcome = classify_refresh_failure(response)
+        detail = f"{response.status_code} - {response.text[:300]}"
+        if outcome == TOKEN_REJECTED:
+            locked.refresh_failures += 1
+            if locked.refresh_failures >= REFRESH_FAILURE_LIMIT:
+                locked.is_active = False
+                deactivated = True
+            locked.save(update_fields=['refresh_failures', 'is_active', 'updated_at'])
+        # Fall out of the block so the counter/deactivation commit before we raise.
+
+    if outcome == TRANSIENT:
+        logger.warning("%s token refresh failed transiently for user %s: %s — will retry next sync",
+                       provider_label, locked.user_id, detail)
+        raise TokenRefreshError(f"{provider_label} token endpoint error {response.status_code} — will retry on next sync")
+
+    if outcome == CONFIG_ERROR:
+        logger.error("%s rejected the app's own client credentials/request for user %s: %s — "
+                     "check %s_CLIENT_ID / _CLIENT_SECRET; NOT deactivating the connection",
+                     provider_label, locked.user_id, detail, provider_label.upper())
+        raise TokenRefreshError(f"{provider_label} rejected the app's client credentials ({response.status_code})")
+
+    if deactivated:
+        logger.error("%s rejected the refresh token for user %s %d times in a row (%s) — "
+                     "connection deactivated, user must reconnect",
+                     provider_label, locked.user_id, locked.refresh_failures, detail)
+        _notify_reconnect_needed(locked)
+        raise TokenRefreshError(
+            f"{provider_label} refresh token rejected {REFRESH_FAILURE_LIMIT} times in a row — "
+            f"connection deactivated, user must reconnect", deactivated=True)
+
+    logger.error("%s rejected the refresh token for user %s (%d/%d): %s — will retry next sync",
+                 provider_label, locked.user_id, locked.refresh_failures, REFRESH_FAILURE_LIMIT, detail)
+    raise TokenRefreshError(
+        f"{provider_label} rejected the refresh token ({locked.refresh_failures}/{REFRESH_FAILURE_LIMIT}) — "
+        f"will retry on next sync")
+
 
 ##### Calculating Points Helper Function #####
 # Whoop names are normalised to alphanumerics only, so its "Hiking/Rucking" arrives as
@@ -199,6 +383,7 @@ def oura_callback(request):
             'expires_at': timezone.now() + timedelta(seconds = token_data['expires_in']),
             'is_active': True,
             'external_user_id': oura_user_id,
+            'refresh_failures': 0,
         }
 
     )
@@ -218,31 +403,16 @@ def sync_oura_for_user(user, days_back=7):
         )
     except WearableConnection.DoesNotExist:
         raise Exception("Oura Not Connected")
-    
-    # REFRESH TOKEN IF EXPIRED
-    if connection.expires_at and timezone.now() >= connection.expires_at:
-        print(f"Refreshing expired Oura token for user {user.id}")
-        token_response = requests.post(
-            'https://api.ouraring.com/oauth/token',
-            data={
-                'grant_type': 'refresh_token',
-                'refresh_token': connection.refresh_token,
-                'client_id': OURA_CLIENT_ID,
-                'client_secret': OURA_CLIENT_SECRET,
-            }
-        )
-        
-        if token_response.status_code == 200:
-            token_data = token_response.json()
-            connection.access_token = token_data['access_token']
-            connection.refresh_token = token_data['refresh_token']
-            connection.expires_at = timezone.now() + timedelta(seconds=token_data['expires_in'])
-            connection.save()
-            print(f"Oura token refreshed successfully for user {user.id}")
-        else:
-            print(f"Failed to refresh Oura token: {token_response.status_code} - {token_response.text}")
-            raise Exception("Failed to refresh Oura token")
-    
+
+    # REFRESH TOKEN IF EXPIRED (shared, lock-protected, tolerant of transient errors)
+    connection = ensure_fresh_token(
+        connection,
+        token_url='https://api.ouraring.com/oauth/token',
+        client_id=OURA_CLIENT_ID,
+        client_secret=OURA_CLIENT_SECRET,
+        provider_label='Oura',
+    )
+
     end_date = (timezone.now() + timedelta(days=1)).date()
     start_date = end_date - timedelta(days=days_back)
     
@@ -253,11 +423,16 @@ def sync_oura_for_user(user, days_back=7):
     url = f'https://api.ouraring.com/v2/usercollection/workout?start_date={start_date}&end_date={end_date}'
     print(f"Oura API URL: {url}")
     
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
 
     print(f"Oura API response status: {response.status_code}")
     print(f"Oura API response: {response.text}")
 
+    if response.status_code == 401:
+        # Token rejected although expires_at said it was fine (revoked/rotated elsewhere):
+        # force a refresh on the next sync rather than trusting expires_at.
+        mark_token_expired(connection)
+        raise Exception("Failed to fetch Oura data: 401 (token rejected — will refresh on next sync)")
     if response.status_code != 200:
         raise Exception(f"Failed to fetch Oura data: {response.status_code} - {response.text}")
     
@@ -384,7 +559,8 @@ def sync_oura_for_user(user, days_back=7):
         
 
     connection.last_sync = timezone.now()
-    connection.save()
+    # update_fields: never write token columns from a possibly-stale in-memory instance
+    connection.save(update_fields=['last_sync', 'updated_at'])
 
     print(f"Oura sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
@@ -573,6 +749,7 @@ def strava_callback(request):
             'expires_at': timezone.now() + timedelta(seconds = token_data['expires_in']),
             'is_active': True,
             'external_user_id': strava_athlete_id,
+            'refresh_failures': 0,
         }
 
     )
@@ -590,31 +767,16 @@ def sync_strava_for_user(user, days_back=30):
         )
     except WearableConnection.DoesNotExist:
         raise Exception("Strava Not Connected")
-    
-    # REFRESH TOKEN IF EXPIRED
-    if connection.expires_at and timezone.now() >= connection.expires_at:
-        print(f"Refreshing expired Strava token for user {user.id}")
-        token_response = requests.post(
-            'https://www.strava.com/oauth/token',
-            data={
-                'client_id': STRAVA_CLIENT_ID,
-                'client_secret': STRAVA_CLIENT_SECRET,
-                'grant_type': 'refresh_token',
-                'refresh_token': connection.refresh_token,
-            }
-        )
-        
-        if token_response.status_code == 200:
-            token_data = token_response.json()
-            connection.access_token = token_data['access_token']
-            connection.refresh_token = token_data['refresh_token']
-            connection.expires_at = timezone.now() + timedelta(seconds=token_data['expires_in'])
-            connection.save()
-            print(f"Token refreshed successfully for user {user.id}")
-        else:
-            print(f"Failed to refresh token: {token_response.status_code} - {token_response.text}")
-            raise Exception("Failed to refresh Strava token")
-    
+
+    # REFRESH TOKEN IF EXPIRED (shared, lock-protected, tolerant of transient errors)
+    connection = ensure_fresh_token(
+        connection,
+        token_url='https://www.strava.com/oauth/token',
+        client_id=STRAVA_CLIENT_ID,
+        client_secret=STRAVA_CLIENT_SECRET,
+        provider_label='Strava',
+    )
+
     # Use the days_back parameter
     end_date = int(timezone.now().timestamp())
     start_date = int((timezone.now() - timedelta(days=days_back)).timestamp())
@@ -623,9 +785,13 @@ def sync_strava_for_user(user, days_back=30):
 
     response = requests.get(
         f'https://www.strava.com/api/v3/athlete/activities?after={start_date}&before={end_date}',
-        headers=headers
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
     )
 
+    if response.status_code == 401:
+        mark_token_expired(connection)
+        raise Exception("Failed to fetch Strava data: 401 (token rejected — will refresh on next sync)")
     if response.status_code != 200:
         print(f"Failed to fetch Strava activities: {response.status_code} - {response.text}")
         raise Exception(f"Failed to fetch Strava data: {response.status_code}")
@@ -749,7 +915,7 @@ def sync_strava_for_user(user, days_back=30):
                 print(f"User {user} logged {score} points")
 
     connection.last_sync = timezone.now()
-    connection.save()
+    connection.save(update_fields=['last_sync', 'updated_at'])
 
     return {"success": True, "workouts_added": workouts_added}
 
@@ -1009,32 +1175,16 @@ def sync_whoop_for_user(user, days_back=30):
     except WearableConnection.DoesNotExist:
         raise Exception("Whoop not connected")
 
-    # REFRESH TOKEN IF EXPIRED
-    if connection.expires_at and timezone.now() >= connection.expires_at:
-        print(f"Refreshing expired Whoop token for user {user.id}")
-        token_response = requests.post(
-            'https://api.prod.whoop.com/oauth/oauth2/token',
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-            data={
-                'grant_type': 'refresh_token',
-                'refresh_token': connection.refresh_token,
-                'client_id': WHOOP_CLIENT_ID,
-                'client_secret': WHOOP_CLIENT_SECRET,
-            }
-        )
-        if token_response.status_code == 200:
-            token_data = token_response.json()
-            connection.access_token = token_data['access_token']
-            connection.refresh_token = token_data.get('refresh_token', connection.refresh_token)
-            connection.expires_at = timezone.now() + timedelta(seconds=token_data['expires_in'])
-            connection.save()
-            print(f"Whoop token refreshed successfully for user {user.id}")
-        else:
-            print(f"Failed to refresh Whoop token: {token_response.status_code} - {token_response.text}")
-            # Mark inactive so we stop retrying every hour — user must reconnect
-            connection.is_active = False
-            connection.save()
-            raise Exception("Failed to refresh Whoop token — connection deactivated, user must reconnect")
+    # REFRESH TOKEN IF EXPIRED (shared, lock-protected, tolerant of transient errors).
+    # Whoop's docs include scope=offline on the refresh call so a new refresh token is issued.
+    connection = ensure_fresh_token(
+        connection,
+        token_url='https://api.prod.whoop.com/oauth/oauth2/token',
+        client_id=WHOOP_CLIENT_ID,
+        client_secret=WHOOP_CLIENT_SECRET,
+        provider_label='Whoop',
+        extra_data={'scope': 'offline'},
+    )
 
     end_time = timezone.now()
     start_time = end_time - timedelta(days=days_back)
@@ -1044,9 +1194,15 @@ def sync_whoop_for_user(user, days_back=30):
     headers = {'Authorization': f'Bearer {connection.access_token}'}
     response = requests.get(
         f'https://api.prod.whoop.com/developer/v2/activity/workout?start={start_date}&end={end_date}',
-        headers=headers
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
     )
 
+    if response.status_code == 401:
+        # Whoop invalidates access tokens when the refresh token is used elsewhere; force
+        # a refresh on the next sync instead of trusting expires_at.
+        mark_token_expired(connection)
+        raise Exception("Failed to fetch Whoop data: 401 (token rejected — will refresh on next sync)")
     if response.status_code != 200:
         print(f"Failed to fetch Whoop workouts: {response.status_code} - {response.text}")
         raise Exception(f"Failed to fetch Whoop data: {response.status_code}")
@@ -1163,7 +1319,7 @@ def sync_whoop_for_user(user, days_back=30):
                 print(f"User {user} logged {score} Whoop points.")
 
     connection.last_sync = timezone.now()
-    connection.save()
+    connection.save(update_fields=['last_sync', 'updated_at'])
 
     print(f"Whoop sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
@@ -1300,6 +1456,7 @@ def whoop_callback(request):
                 'expires_at': timezone.now() + timedelta(seconds=token_data.get('expires_in', 3600)),
                 'is_active': True,
                 'external_user_id': whoop_user_id,
+                'refresh_failures': 0,
             }
         )
         
@@ -1410,26 +1567,30 @@ def check_connection_status(request):
     if not user:
         return JsonResponse({'error': 'Authentication Required'}, status=401)
     
-    connections = WearableConnection.objects.filter(
-        user=user,
-        is_active=True
-    )
-    
+    connections = WearableConnection.objects.filter(user=user)
+
     status = {
         'oura': False,
         'strava': False,
         'whoop': False,
-        'connections': []
+        'connections': [],
+        # Providers whose connection was switched off because the provider kept rejecting
+        # our refresh token; the user has to go through the connect flow again. (Explicit
+        # disconnects delete the row, so anything inactive here is a broken link.)
+        'needs_reconnect': [],
     }
-    
+
     for connection in connections:
+        if not connection.is_active:
+            status['needs_reconnect'].append(connection.device_type)
+            continue
         status[connection.device_type] = True
         status['connections'].append({
             'provider': connection.device_type,
             'connected_at': connection.created_at,
             'last_sync': connection.last_sync
         })
-    
+
     return JsonResponse(status)
 
 
