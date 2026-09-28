@@ -245,3 +245,49 @@ def leaderboard_api_jwt(request):
     ]
 
     return JsonResponse({"leaderboard": data})
+
+
+### Leaderboard history (global): the past weeks archived by groups.tasks.reset_scores
+
+from groups.models import WeeklyScore
+from groups.views import history_response, parse_week_start
+
+
+@csrf_exempt
+def leaderboard_history_weeks_api_jwt(request):
+    """Weeks that have an archived global leaderboard, newest first."""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    if not get_user_from_token(request):
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+    weeks = (
+        WeeklyScore.objects
+        .order_by("-week_start")
+        .values_list("week_start", flat=True)
+        .distinct()
+    )
+    return JsonResponse({"weeks": [week.isoformat() for week in weeks]})
+
+
+@csrf_exempt
+def leaderboard_history_api_jwt(request, week_start):
+    """Top 10 for one past week: the history counterpart to leaderboard_api_jwt."""
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    if not get_user_from_token(request):
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+    week = parse_week_start(week_start)
+    if week is None:
+        return JsonResponse({"error": "week_start must be YYYY-MM-DD"}, status=400)
+
+    rows = (
+        WeeklyScore.objects
+        .filter(week_start=week)
+        .select_related("user")
+        .order_by("-score", "user__username")[:10]
+    )
+    return history_response(week, rows)

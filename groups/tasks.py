@@ -1,14 +1,53 @@
+import json
+from datetime import timedelta
+from zoneinfo import ZoneInfo
+
 from celery import shared_task
+from django.db import transaction
+from django.db.models import F
+from django.utils import timezone
+
 from fitness.models import Cardio, Gym, Sport
-from django.contrib.auth.models import User
 from profile_page.models import Profile
+from .models import WeeklyScore
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def previous_monday_pacific(now=None):
+    """Monday (as a Pacific date) of the week that has just ended.
+
+    Beat fires reset_scores early on Monday morning Pacific time, so "yesterday" always
+    falls inside the week being closed. Using the Pacific date rather than the cron tick
+    keeps the label right when DST moves the 08:00 UTC tick to 1am, or the task runs late.
+    """
+    yesterday = (now or timezone.now()).astimezone(PACIFIC).date() - timedelta(days=1)
+    return yesterday - timedelta(days=yesterday.weekday())
 
 
 @shared_task
 def reset_scores():
-    profiles = Profile.objects.all().update(score=0)
-    print(f"New week: all ({profiles}) scores reset to 0")
+    """Archive every non-zero score as a WeeklyScore row, then subtract it from the profile.
 
+    One transaction, so a score can never be reset without being saved first. Subtracting
+    (instead of setting 0) keeps points that land mid-task for the new week. The early
+    return makes a Beat retry or double-fire a no-op rather than archiving the new week's
+    first points under last week's date.
+    """
+    week_start = previous_monday_pacific()
+    with transaction.atomic():
+        if WeeklyScore.objects.filter(week_start=week_start).exists():
+            print(f"Week of {week_start} already archived, skipping reset")
+            return
+
+        profiles = list(Profile.objects.select_for_update().filter(score__gt=0))
+        WeeklyScore.objects.bulk_create(
+            [WeeklyScore(user_id=p.user_id, week_start=week_start, score=p.score) for p in profiles]
+        )
+        for p in profiles:
+            Profile.objects.filter(pk=p.pk).update(score=F("score") - p.score)
+
+    print(f"New week: archived {len(profiles)} scores for the week of {week_start} and reset them to 0")
 
 import anthropic
 
@@ -24,15 +63,45 @@ def downscaled(image_url: str) -> str:
     return f"{head}{marker}w_1024,h_1024,c_limit,q_80/{tail}"
 
 
+# Workout types a photo can earn the bonus for. Booze has no exercise to check against.
+VERIFIABLE_WORKOUTS = {'cardio': Cardio, 'gym': Gym, 'sport': Sport}
+VERIFICATION_BONUS = 50
+
+# Structured output, so the verdict is a boolean rather than whatever the reply happens to
+# start with ("**Yes**", "Verdict: yes", ...).
+VERDICT_FORMAT = {
+    "type": "json_schema",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "verified": {"type": "boolean"},
+            "reasoning": {"type": "string"},
+        },
+        "required": ["verified", "reasoning"],
+        "additionalProperties": False,
+    },
+}
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=30)
 def verify_workout_image(self, image_url: str, exercise: str, workout_type: str, workout_id: int, user_id: int) -> bool:
     print("image verification initiated")
+    model = VERIFIABLE_WORKOUTS.get(workout_type)
+    if model is None:
+        print(f"No image verification for {workout_type} workouts")
+        return False
+    # A replaced photo re-queues this task, but the bonus is once per workout, so skip the API call.
+    if model.objects.filter(id=workout_id, verified=True).exists():
+        print(f"{workout_type} {workout_id} is already verified, skipping")
+        return True
+
     try:
         # image_url is the public Cloudinary URL, which the API fetches itself.
         client = anthropic.Anthropic()
         response = client.messages.create(
             model="claude-opus-4-5",
-            max_tokens=256,
+            max_tokens=512,
+            output_config={"format": VERDICT_FORMAT},
             messages=[{
                 "role": "user",
                 "content": [
@@ -40,7 +109,7 @@ def verify_workout_image(self, image_url: str, exercise: str, workout_type: str,
                     {"type": "text", "text": f"""
                         Does this image provide at least minor evidence that the person in the photo had
                         been performing {exercise}? Evidence could include the location, other people, signs of activity or anything that
-                        might indicate the given workout. Please be somewhat leniant, return yes or no and a brief reasoning of your decision.
+                        might indicate the given workout. Please be somewhat lenient, set verified to your decision and give a brief reasoning.
                      """}
                 ]
             }]
@@ -74,27 +143,30 @@ def verify_workout_image(self, image_url: str, exercise: str, workout_type: str,
         print(f"Image verification errored before reaching the API, not retrying: {exc!r}")
         raise
 
-    result = response.content[0].text.strip().lower()
-    print(f"Image verification result: {result}")
+    # A refusal or a max_tokens cut-off has no complete verdict to read.
+    if response.stop_reason != "end_turn":
+        print(f"Image verification ended with stop_reason={response.stop_reason}, not verifying")
+        return False
+    text = next((block.text for block in response.content if block.type == "text"), "")
+    try:
+        verdict = json.loads(text)
+    except json.JSONDecodeError:
+        print(f"Image verification returned unparseable output: {text!r}")
+        return False
+    print(f"Image verification result: {verdict}")
 
-    if result.startswith("yes"):
-        if workout_type == 'cardio':
-            workout = Cardio.objects.get(id=workout_id)
-        elif workout_type == 'gym':
-            workout = Gym.objects.get(id=workout_id)
-        elif workout_type == 'sport':
-            workout = Sport.objects.get(id=workout_id)
-        else:
-            print("Unknown workout type during image validation")
-            return False
-        workout.verified = True
-        workout.score += 50
-        workout.save()
-        user = User.objects.get(id=user_id)
-        user.profile.score += 50
-        user.profile.save()
-        return True
+    if not verdict.get("verified"):
+        return False
 
-    return False
+    # Conditional F() updates rather than read-modify-save: the verified=False filter lets only
+    # one task award the bonus even if two race, and F() doesn't overwrite points the profile
+    # gains (or reset_scores removes) while this runs.
+    with transaction.atomic():
+        awarded = model.objects.filter(id=workout_id, verified=False).update(
+            verified=True, score=F("score") + VERIFICATION_BONUS
+        )
+        if awarded:
+            Profile.objects.filter(user_id=user_id).update(score=F("score") + VERIFICATION_BONUS)
+    return True
     
 

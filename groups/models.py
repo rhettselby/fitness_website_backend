@@ -13,3 +13,24 @@ class FitnessGroup(models.Model):
     
 
     
+
+
+class WeeklyScore(models.Model):
+    """One user's final score for one leaderboard week.
+
+    Written by ``groups.tasks.reset_scores`` right before it zeroes ``Profile.score``, so
+    past weeks survive the Monday reset. ``week_start`` is that week's Monday as a Pacific
+    date. Rank is computed when read, not stored; group history is these rows filtered by
+    the group's current members.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="weekly_scores")
+    week_start = models.DateField()
+    score = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "week_start"], name="uniq_user_week")]
+        indexes = [models.Index(fields=["week_start", "-score"])]
+
+    def __str__(self):
+        return f"{self.user.username} - week of {self.week_start} - {self.score}"

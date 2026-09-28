@@ -14,7 +14,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
 from notifications.tasks import send_comment_notification
 import cloudinary.uploader
-from groups.tasks import verify_workout_image
+from groups.tasks import VERIFIABLE_WORKOUTS, verify_workout_image
 
 
 
@@ -295,11 +295,9 @@ def add_booze(request):
         user.profile.score += score
         user.profile.save()
 
+        # No image verification: there's no exercise for a booze photo to be evidence of.
         obj.score = score
         obj.save()
-
-        if obj.image:
-            verify_workout_image.delay(obj.image.url, None, "booze", obj.id, obj.user.id)
 
         return JsonResponse({
             "success": True,
@@ -450,23 +448,19 @@ def add_image(request, workout_id):
         
 
         workout_type = request.POST.get('workout_type')
-        
-        if workout_type == 'cardio':
-            workout = Cardio.objects.get(id=workout_id)
-        elif workout_type == 'gym':
-            workout = Gym.objects.get(id=workout_id)
-        elif workout_type == 'sport':
-            workout = Sport.objects.get(id=workout_id)
-        else:
-            workout = None
+        model = VERIFIABLE_WORKOUTS.get(workout_type)
+        # Only the owner's workouts: someone else's looks the same as one that doesn't exist.
+        workout = model.objects.filter(id=workout_id, user=user).first() if model else None
+        if workout is None:
             return JsonResponse({"error": "Workout not found"}, status = 404)
-        
+
         if 'image' in request.FILES:
             workout.image = request.FILES['image']
             #must save to db so cloudinary processes before extracting url
             workout.save()
+            exercise = workout.sport if isinstance(workout, Sport) else workout.activity
             try:
-                verify_workout_image.delay(workout.image.url, workout.activity, workout_type, workout.id, workout.user.id)
+                verify_workout_image.delay(workout.image.url, exercise, workout_type, workout.id, workout.user.id)
             except Exception as e:
                 return JsonResponse({"error": str(e)}, status = 500)
 

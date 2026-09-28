@@ -49,6 +49,8 @@ urlpatterns = [
     
     # API routes only - remove duplicates
     path('api/leaderboard/', views.leaderboard_api, name='leaderboard_api'),
+    path('api/leaderboard/history/', views.leaderboard_history_weeks_api_jwt, name='leaderboard_history_weeks'),
+    path('api/leaderboard/history/<str:week_start>/', views.leaderboard_history_api_jwt, name='leaderboard_history'),
     path('api/posts/', include('posts.urls')),
     path('users/', include('users.urls')),  # This already has /api/ paths inside
     path('api/fitness/', include('fitness.urls')),  # This already has /api/ paths inside
