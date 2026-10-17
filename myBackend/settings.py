@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'groups',
     'notifications',
+    'insights',
     'cloudinary_storage',
     'cloudinary',
 ]
@@ -309,6 +310,12 @@ CELERY_BEAT_SCHEDULE = {
     'reset_score': {
         'task': 'groups.tasks.reset_scores',
         'schedule': crontab(minute=0, hour=8, day_of_week=1),  # Monday 12am PST = 8am UTC
+    },
+    'weekly-insights': {
+        'task': 'insights.tasks.generate_weekly_insights',
+        # Monday 7am PST / 8am PDT: after reset_score has archived the leaderboard week the
+        # insights quote, and after the overnight wearable syncs have pulled in Sunday's workouts.
+        'schedule': crontab(minute=0, hour=15, day_of_week=1),
     },
     'monthly-workout-reminder': {
         'task': 'notifications.tasks.send_monthly_reminders',

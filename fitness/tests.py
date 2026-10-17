@@ -1,4 +1,4 @@
-"""Tests for photo verification.
+"""Tests for photo verification and likes.
 
 A workout photo queues ``groups.tasks.verify_workout_image``, which asks Claude whether the photo
 shows the workout and, the first time it does, marks the workout verified and awards the bonus to
@@ -11,13 +11,14 @@ from unittest import mock
 
 from cloudinary import CloudinaryResource
 from django.contrib.auth.models import User
+from django.contrib.contenttypes.models import ContentType
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from rest_framework_simplejwt.tokens import AccessToken
 
 from groups.tasks import VERIFICATION_BONUS, verify_workout_image
 from profile_page.models import Profile
-from .models import Booze, Cardio, Sport
+from .models import Booze, Cardio, Comment, Gym, Sport
 
 
 def make_user(username, score=0):
@@ -163,3 +164,61 @@ class WorkoutPhotoViewTests(TestCase):
         self.assertEqual(res.status_code, 201)
         self.assertIsNotNone(res.json()["booze"]["image_url"])
         verify.delay.assert_not_called()
+
+
+class LikeTests(TestCase):
+    def setUp(self):
+        self.alice = make_user("alice")
+        self.bob = make_user("bob")
+        self.run = Cardio.objects.create(user=self.alice, activity="Running")
+
+    def like(self, user, workout_type="cardio", workout_id=None):
+        return self.client.post(
+            "/api/fitness/api/likes/",
+            json.dumps({"workout_type": workout_type, "workout_id": workout_id or self.run.id}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(user)}",
+        )
+
+    def feed(self, user=None):
+        headers = {"HTTP_AUTHORIZATION": f"Bearer {AccessToken.for_user(user)}"} if user else {}
+        workouts = self.client.get("/api/posts/recent-workouts/", **headers).json()["workouts"]
+        return {(w["type"], w["id"]): w for w in workouts}
+
+    def test_liking_twice_toggles_the_like_off(self):
+        self.assertEqual(self.like(self.bob).json(), {"success": True, "liked": True, "like_count": 1})
+        self.assertEqual(self.like(self.bob).json(), {"success": True, "liked": False, "like_count": 0})
+
+    def test_each_user_counts_once(self):
+        self.like(self.alice)
+        self.assertEqual(self.like(self.bob).json()["like_count"], 2)
+
+    def test_requires_login(self):
+        res = self.client.post(
+            "/api/fitness/api/likes/",
+            json.dumps({"workout_type": "cardio", "workout_id": self.run.id}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 401)
+
+    def test_bad_type_or_id_is_rejected(self):
+        self.assertEqual(self.like(self.bob, workout_type="yoga").status_code, 400)
+        self.assertEqual(self.like(self.bob, workout_id=999).status_code, 404)
+
+    def test_feed_shows_like_count_and_whether_you_liked_it(self):
+        lift = Gym.objects.create(user=self.alice, activity="Push day")
+        cardio_ct = ContentType.objects.get_for_model(Cardio)
+        Comment.objects.create(user=self.bob, text="nice", content_type=cardio_ct, object_id=self.run.id)
+        Comment.objects.create(user=self.alice, text="thx", content_type=cardio_ct, object_id=self.run.id)
+        self.like(self.alice)
+        self.like(self.bob)
+        self.like(self.bob, workout_type="gym", workout_id=lift.id)
+
+        alices_feed = self.feed(self.alice)
+        run, gym = alices_feed[("cardio", self.run.id)], alices_feed[("gym", lift.id)]
+        # Two comments and two likes on the same run must not multiply each other's counts
+        self.assertEqual((run["like_count"], run["comment_count"], run["liked"]), (2, 2, True))
+        self.assertEqual((gym["like_count"], gym["liked"]), (1, False))
+
+        logged_out_run = self.feed()[("cardio", self.run.id)]
+        self.assertEqual((logged_out_run["like_count"], logged_out_run["liked"]), (2, False))

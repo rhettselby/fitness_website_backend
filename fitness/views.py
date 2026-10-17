@@ -394,6 +394,40 @@ def add_comment_api_jwt(request):
         return JsonResponse({"success": False, "error": str(e)}, status = 500)
     
 
+LIKEABLE_WORKOUTS = {'cardio': Cardio, 'gym': Gym, 'sport': Sport, 'booze': Booze}
+
+
+@csrf_exempt
+def toggle_like_api_jwt(request):
+    """Like the workout if the user hasn't yet, otherwise unlike it."""
+    if request.method != "POST":
+        return JsonResponse({"success": False, "error": "Only Post Allowed"}, status=405)
+
+    user = get_user_from_token(request)
+    if not user:
+        return JsonResponse({"success": False, "error": "Authentication required"}, status=401)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)
+
+    model = LIKEABLE_WORKOUTS.get(data.get('workout_type'))
+    if model is None:
+        return JsonResponse({"success": False, "error": "Invalid workout type"}, status=400)
+
+    workout = get_object_or_404(model, pk=data.get('workout_id'))
+    like, created = Like.objects.get_or_create(
+        user=user,
+        content_type=ContentType.objects.get_for_model(model),
+        object_id=workout.id,
+    )
+    if not created:
+        like.delete()
+
+    return JsonResponse({"success": True, "liked": created, "like_count": workout.likes.count()})
+
+
 def get_comments_api(request, workout_type, workout_id):
     if workout_type == 'cardio':
         model = Cardio

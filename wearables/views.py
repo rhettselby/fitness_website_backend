@@ -100,6 +100,27 @@ def mark_token_expired(connection):
     connection.expires_at = timezone.now()
     connection.save(update_fields=['expires_at', 'updated_at'])
 
+def upload_workout(user_id, external_id, data):
+
+    WINDOW = 5
+    with transaction.atomic():
+        # Blocks other transactions trying to lock this same user until we commit
+        User.objects.select_for_update().get(pk=user_id)
+
+        existing = Cardio.objects.filter(
+            user_id=user_id,
+            start_dt__gte=data.date - WINDOW,
+            start_dt__lte=data.date + WINDOW,
+        ).first()
+
+        if existing:
+            return   # see below
+        return Cardio.objects.create(user_id=user_id, **data.fields)
+
+
+    return
+
+
 
 def classify_refresh_failure(response):
     """Sort a non-200 token-endpoint response into TRANSIENT, CONFIG_ERROR or TOKEN_REJECTED.
@@ -498,9 +519,8 @@ def sync_oura_for_user(user, days_back=7):
 
             score = oura_points(activity_type, duration_minutes, intensity)
 
-            _, created = Cardio.objects.get_or_create(
-                user=user,
-                external_id=f"oura_{oura_workout_id}",
+            created = upload_workout(user,
+                external_id = f"oura_{oura_workout_id}",
                 defaults={
                     'activity': f"Oura: {activity_type}",
                     'date': workout.get('start_datetime'),

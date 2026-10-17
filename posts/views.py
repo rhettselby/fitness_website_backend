@@ -1,4 +1,5 @@
-from django.db.models import Count
+from django.contrib.contenttypes.models import ContentType
+from django.db.models import Count, Exists, OuterRef
 from django.http import JsonResponse
 from django.shortcuts import render
 
@@ -6,7 +7,7 @@ from fitness.views import get_user_from_token
 from .models import Post
 from django.contrib.auth.decorators import login_required
 from . import forms
-from fitness.models import Gym, Cardio, Sport
+from fitness.models import Gym, Cardio, Sport, Like
 
 # Create your views here.
 
@@ -86,20 +87,30 @@ def workout_log(request):
 
 ###############FINAL####VERSION#################
 
+def latest_workouts(model, user):
+    """The 10 newest workouts of one type, with comment/like counts and whether ``user`` liked each."""
+    liked_by_user = Like.objects.filter(
+        content_type=ContentType.objects.get_for_model(model),
+        object_id=OuterRef('pk'),
+        user_id=user.id if user else None,
+    )
+    # distinct=True because comments and likes are both joined in, which would multiply plain counts
+    return model.objects.select_related('user').annotate(
+        _comment_count=Count('comments', distinct=True),
+        like_count=Count('likes', distinct=True),
+        liked=Exists(liked_by_user),
+    ).order_by('-date')[:10]
+
+
 def recent_workouts_api(request):
     """
     Get the most recent workouts from all users (public feed)
     """
     try:
         user = get_user_from_token(request)
-        # Get recent cardio and gym workouts
-        # annotate _comment_count so comment_count doesn't fire a COUNT per row
-        cardio = Cardio.objects.select_related('user').annotate(
-            _comment_count=Count('comments')).order_by('-date')[:10]
-        gym = Gym.objects.select_related('user').annotate(
-            _comment_count=Count('comments')).order_by('-date')[:10]
-        sport = Sport.objects.select_related('user').annotate(
-            _comment_count=Count('comments')).order_by('-date')[:10]
+        cardio = latest_workouts(Cardio, user)
+        gym = latest_workouts(Gym, user)
+        sport = latest_workouts(Sport, user)
         
         workout_list = []
         
@@ -113,6 +124,8 @@ def recent_workouts_api(request):
                 'duration': workout.duration,
                 'username': workout.user.username,
                 'comment_count':workout.comment_count,
+                'like_count': workout.like_count,
+                'liked': workout.liked,
                 'score':workout.score,
                 'image_url':workout.image.url if workout.image else None,
                 'verified':workout.verified,
@@ -128,6 +141,8 @@ def recent_workouts_api(request):
                 'duration': None,  #Gym workouts don't have a duration
                 'username': workout.user.username,
                 'comment_count': workout.comment_count,
+                'like_count': workout.like_count,
+                'liked': workout.liked,
                 'score':workout.score,
                 'image_url':workout.image.url if workout.image else None,
                 'verified':workout.verified,
@@ -142,6 +157,8 @@ def recent_workouts_api(request):
                 'duration': workout.duration,  #Gym workouts don't have a duration
                 'username': workout.user.username,
                 'comment_count': workout.comment_count,
+                'like_count': workout.like_count,
+                'liked': workout.liked,
                 'score':workout.score,
                 'level':workout.level,
                 'image_url':workout.image.url if workout.image else None,

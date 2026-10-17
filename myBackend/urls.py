@@ -65,6 +65,9 @@ urlpatterns = [
     #wearables
     path('api/wearables/', include('wearables.urls')),
 
+    #AI weekly insights
+    path('api/insights/', include('insights.urls')),
+
     #email notification unsubscribe (public, token-based)
     path('notifications/', include('notifications.urls')),
 

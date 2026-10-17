@@ -19,9 +19,8 @@ class Workout(models.Model):
     image = CloudinaryField('image', null=True, blank=True, format='jpg')
 
     #not a model field but a generic relation
-    comments = GenericRelation('Comment') #Query Set manager that represents a databse relation
-                                            #returns QuerySets, all django query sets have
-                                            # .all() .filter(), .count(), .first(), ...
+    comments = GenericRelation('Comment')
+    likes = GenericRelation('Like')
     
       # owner, CASCADE means workouts are deleted if user is deleted
 
@@ -79,6 +78,10 @@ class Like(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE) #Using content_type/object_id because Workout is abstract
     object_id = models.PositiveIntegerField()
     workout = GenericForeignKey('content_type', 'object_id')
+
+    class Meta:
+        # One like per user per workout, so a double-click can't count twice
+        constraints = [models.UniqueConstraint(fields=['user', 'content_type', 'object_id'], name='uniq_like')]
 
 
 class Sport(Workout):
