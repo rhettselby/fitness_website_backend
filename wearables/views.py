@@ -7,10 +7,12 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.contrib.auth.models import User
 from django.db import transaction
+from django.db.models import F, Q
 import os
 from datetime import timedelta
 from .models import WearableConnection
 from fitness.models import Cardio, Sport
+from profile_page.models import Profile
 import requests
 import hashlib
 import hmac
@@ -80,9 +82,6 @@ TRANSIENT, CONFIG_ERROR, TOKEN_REJECTED = 'transient', 'config', 'token'
 
 class TokenRefreshError(Exception):
     """Raised when no usable access token could be obtained.
-
-    ``deactivated`` is True when the connection was switched off as a result and the
-    user has to re-link the device; otherwise the next sync will simply try again.
     """
 
     def __init__(self, message, deactivated=False):
@@ -96,30 +95,9 @@ def token_needs_refresh(connection):
 
 
 def mark_token_expired(connection):
-    """Force a refresh on the next sync (used when the API rejects a token we thought was valid)."""
+    """Force a refresh on the next sync (used when the API rejects a token it thought was valid)."""
     connection.expires_at = timezone.now()
     connection.save(update_fields=['expires_at', 'updated_at'])
-
-def upload_workout(user_id, external_id, data):
-
-    WINDOW = 5
-    with transaction.atomic():
-        # Blocks other transactions trying to lock this same user until we commit
-        User.objects.select_for_update().get(pk=user_id)
-
-        existing = Cardio.objects.filter(
-            user_id=user_id,
-            start_dt__gte=data.date - WINDOW,
-            start_dt__lte=data.date + WINDOW,
-        ).first()
-
-        if existing:
-            return   # see below
-        return Cardio.objects.create(user_id=user_id, **data.fields)
-
-
-    return
-
 
 
 def classify_refresh_failure(response):
@@ -332,6 +310,42 @@ def whoop_points(activity, duration, intensity):
     return integer_score
 
 
+DUPLICATE_WINDOW = timedelta(minutes=5)
+POINTS = {'Oura': oura_points, 'Strava': strava_points, 'Whoop': whoop_points}
+
+
+def add_workout(user, provider, workout_id, name, activity, start, duration, intensity=None):
+
+    if activity in CARDIO or activity in EXCLUDED_ACTIVITIES:
+        model, label_field = Cardio, 'activity'
+    else:
+        model, label_field = Sport, 'sport'
+    external_id = f"{provider.lower()}_{workout_id}"
+    label = f"{provider}: {name}"
+    duplicate = Q(external_id=external_id) | Q(date__range=(start - DUPLICATE_WINDOW, start + DUPLICATE_WINDOW))
+
+    with transaction.atomic():
+        # Per-user lock so overlapping syncs can't both pass the duplicate check
+        User.objects.select_for_update().get(pk=user.pk)
+
+        existing = Cardio.objects.filter(duplicate, user=user).first() or Sport.objects.filter(duplicate, user=user).first()
+        if existing:
+            if isinstance(existing, model) and duration > existing.duration:
+                existing.duration = duration
+                existing.external_id = external_id
+                setattr(existing, label_field, label)
+                existing.save(update_fields=['duration', 'external_id', label_field])
+            return False
+
+        score = POINTS[provider](activity, duration, intensity)
+        model.objects.create(user=user, external_id=external_id, date=start, duration=duration,
+                             score=score, **{label_field: label})
+        Profile.objects.filter(user=user).update(score=F('score') + score)
+
+    print(f"User {user.id} logged {score} {provider} points")
+    return True
+
+
 @csrf_exempt
 def oura_connect(request):
    
@@ -414,7 +428,6 @@ def oura_callback(request):
     return redirect('https://www.rhetts-fitness-community.com/connect')
     
 
-##Helper function to add workouts
 def sync_oura_for_user(user, days_back=7):
     try:
         connection = WearableConnection.objects.get(
@@ -436,18 +449,13 @@ def sync_oura_for_user(user, days_back=7):
 
     end_date = (timezone.now() + timedelta(days=1)).date()
     start_date = end_date - timedelta(days=days_back)
-    
-    print(f"Syncing Oura for user {user.id} from {start_date} to {end_date}")
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
-
-    url = f'https://api.ouraring.com/v2/usercollection/workout?start_date={start_date}&end_date={end_date}'
-    print(f"Oura API URL: {url}")
-    
-    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-
-    print(f"Oura API response status: {response.status_code}")
-    print(f"Oura API response: {response.text}")
+    response = requests.get(
+        f'https://api.ouraring.com/v2/usercollection/workout?start_date={start_date}&end_date={end_date}',
+        headers=headers,
+        timeout=REQUEST_TIMEOUT,
+    )
 
     if response.status_code == 401:
         # Token rejected although expires_at said it was fine (revoked/rotated elsewhere):
@@ -456,127 +464,19 @@ def sync_oura_for_user(user, days_back=7):
         raise Exception("Failed to fetch Oura data: 401 (token rejected — will refresh on next sync)")
     if response.status_code != 200:
         raise Exception(f"Failed to fetch Oura data: {response.status_code} - {response.text}")
-    
-    data = response.json()
+
     workouts_added = 0
-
-    for workout in data.get('data', []):
-        activity_type = workout.get('activity', 'Unknown Activity')
-        oura_workout_id = str(workout.get('id'))
-
-        start_datetime = workout.get('start_datetime')
-        start_dt = parse_datetime(start_datetime)
-
-
-        start = start_dt
-        end = workout.get('end_datetime')
-
-        if start and end:
-            end_dt = parse_datetime(end)
-            duration_seconds = int((end_dt - start_dt).total_seconds())
-        else:
-            print("Oura workout duration not found")
-            duration_seconds = 0
-
-        duration_minutes = max(duration_seconds // 60, 1)
-    
-        if duration_minutes < 25:
+    for workout in response.json().get('data', []):
+        if not (workout.get('start_datetime') and workout.get('end_datetime')):
             continue
-
-          ## Hiking/Walking <45 min doesnt count as workout ;)
-        if activity_type == 'walking' or activity_type == 'hiking':
-            if duration_minutes < 45:
-                print("Skipping oura workout (walk)")
-                continue
-
-
-        ###Logic to prevent duplicate workouts with same start time (different workout id's)
-        start_datetime = workout.get('start_datetime')
-        
-        if activity_type.lower() in CARDIO or activity_type.lower() in EXCLUDED_ACTIVITIES:
-
-            existing_workout = Cardio.objects.filter(
-                user=user,
-                date=start_datetime
-                ).first()
-
-            if existing_workout:
-                #if new workout is longer, update existing workout
-                if duration_minutes > existing_workout.duration:
-                    existing_workout.duration = duration_minutes
-                    existing_workout.activity = f"Oura: {activity_type}"
-                    existing_workout.external_id = f"oura_{oura_workout_id}"
-                    existing_workout.save()
-                    print(f"Updated workout to longer duration: {duration_minutes} min")
-                    continue
-                else:
-                    print(f"Skipping shorter duplicate workout")
-                    continue
-                
-
-            
-            intensity = workout.get('intensity', 'easy')
-
-            score = oura_points(activity_type, duration_minutes, intensity)
-
-            created = upload_workout(user,
-                external_id = f"oura_{oura_workout_id}",
-                defaults={
-                    'activity': f"Oura: {activity_type}",
-                    'date': workout.get('start_datetime'),
-                    'duration': duration_minutes,
-                    'score': score,
-                }
-            )
-            if created: 
-                workouts_added += 1
-                user.profile.score += score
-                user.profile.save()
-                print(f"User {user} logged {score} points.")
-        
-        else:
-            #sport workout
-            existing_workout = Sport.objects.filter(
-                user=user,
-                date=start_datetime
-                ).first()
-
-            if existing_workout:
-                #if new workout is longer, update existing workout
-                if duration_minutes > existing_workout.duration:
-                    existing_workout.duration = duration_minutes
-                    existing_workout.sport = f"Oura: {activity_type}"
-                    existing_workout.external_id = f"oura_{oura_workout_id}"
-                    existing_workout.save()
-                    print(f"Updated workout to longer duration: {duration_minutes} min")
-                    continue
-                else:
-                    print(f"Skipping shorter duplicate workout")
-                    continue
-                
-
-            
-            intensity = workout.get('intensity', 'easy')
-
-            score = oura_points(activity_type, duration_minutes, intensity)
-
-            _, created = Sport.objects.get_or_create(
-                user=user,
-                external_id=f"oura_{oura_workout_id}",
-                defaults={
-                    'sport': f"Oura: {activity_type}",
-                    'date': workout.get('start_datetime'),
-                    'duration': duration_minutes,
-                    'score': score,
-                    'level': "recreational",
-                }
-            )
-            if created: 
-                workouts_added += 1
-                user.profile.score += score
-                user.profile.save()
-                print(f"User {user} logged {score} points.")
-        
+        start = parse_datetime(workout['start_datetime'])
+        duration = int((parse_datetime(workout['end_datetime']) - start).total_seconds()) // 60
+        activity = workout.get('activity', 'Unknown Activity')
+        if duration < 25 or (activity in ('walking', 'hiking') and duration < 45):
+            continue
+        if add_workout(user, 'Oura', workout.get('id'), activity, activity.lower(), start, duration,
+                       workout.get('intensity', 'easy')):
+            workouts_added += 1
 
     connection.last_sync = timezone.now()
     # update_fields: never write token columns from a possibly-stale in-memory instance
@@ -584,7 +484,7 @@ def sync_oura_for_user(user, days_back=7):
 
     print(f"Oura sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
-#Oura Webhook function
+
 
 @csrf_exempt
 def sync_oura(request):
@@ -645,8 +545,6 @@ def oura_webhook(request):
     return JsonResponse({'status': 'success'})
 
 
-####debugging##################
-
 def create_webhook_subscription(user_access_token):
     webhook_url = 'https://fitnesswebsitebackend-production.up.railway.app/api/wearables/oura/webhook/'
     
@@ -703,6 +601,7 @@ def oura_disconnect(request):
         })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+    
 #############STRAVA######################################
 
 
@@ -777,7 +676,6 @@ def strava_callback(request):
     return redirect('https://www.rhetts-fitness-community.com/connect')
 
 
-##Helper function to add workouts
 def sync_strava_for_user(user, days_back=30):
     try:
         connection = WearableConnection.objects.get(
@@ -797,12 +695,10 @@ def sync_strava_for_user(user, days_back=30):
         provider_label='Strava',
     )
 
-    # Use the days_back parameter
     end_date = int(timezone.now().timestamp())
     start_date = int((timezone.now() - timedelta(days=days_back)).timestamp())
 
     headers = {'Authorization': f'Bearer {connection.access_token}'}
-
     response = requests.get(
         f'https://www.strava.com/api/v3/athlete/activities?after={start_date}&before={end_date}',
         headers=headers,
@@ -815,128 +711,21 @@ def sync_strava_for_user(user, days_back=30):
     if response.status_code != 200:
         print(f"Failed to fetch Strava activities: {response.status_code} - {response.text}")
         raise Exception(f"Failed to fetch Strava data: {response.status_code}")
-    
-    activities = response.json()
+
     workouts_added = 0
-
-
-
-    for activity in activities:
-        activity_type = activity.get('type', 'Unknown Activity')
-        activity_date = activity.get('start_date')
-        strava_activity_id = str(activity.get('id'))
-
-
-        duration_seconds = activity.get('moving_time', 0)
-
-
-        if not duration_seconds:
-            start = activity.get('start_date')
-            end = activity.get('end_date')
-
-            if start and end:
-                start_dt = parse_datetime(start)
-                end_dt = parse_datetime(end)
-                duration_seconds = int((end_dt - start_dt).total_seconds())
-            else:
-                duration_seconds = 0
-
-            duration_minutes = max(duration_seconds // 60, 1)
-        else:
-            duration_minutes = max(duration_seconds // 60, 1)
-        
-            #Disabled minimum duration threshold due to popular demand
-        if duration_minutes < 10:
+    for activity in response.json():
+        duration = (activity.get('moving_time') or 0) // 60
+        if duration < 10:
             continue
-
-        
-            ###Logic to prevent duplicate workouts with same start time (different workout id's)
-        start_datetime = activity.get('start_date')
-
-        if activity_type.lower() in CARDIO or activity_type.lower() in EXCLUDED_ACTIVITIES:
-
-            existing_workout = Cardio.objects.filter(
-                user=user,
-                date=start_datetime
-                ).first()
-
-            if existing_workout:
-                #if new workout is longer, update existing workout
-                if duration_minutes > existing_workout.duration:
-                    existing_workout.duration = duration_minutes
-                    existing_workout.activity = f"Strava: {activity_type}"
-                    existing_workout.external_id = f"Strava_{strava_activity_id}"
-                    existing_workout.save()
-                    print(f"Updated workout to longer duration: {duration_minutes} min")
-                    continue
-                else:
-                    print(f"Skipping shorter duplicate workout")
-                    continue
-        
-            speed = activity.get('average_speed', None)
-            score = strava_points(activity_type, duration_minutes, speed)
-
-
-            _, created = Cardio.objects.get_or_create(
-                user=user,
-                external_id=f"Strava_{strava_activity_id}",
-                defaults={
-                    'activity': f"Strava: {activity_type}",
-                    'date': activity_date,
-                    'duration': duration_minutes,
-                    'score': score,
-                }
-            )
-            
-            if created:
-                workouts_added += 1
-                user.profile.score += score
-                user.profile.save()
-                print(f"User {user} logged {score} points")
-        else:
-            #Sport Workout
-            existing_workout = Sport.objects.filter(
-                user=user,
-                date=start_datetime
-                ).first()
-
-            if existing_workout:
-                #if new workout is longer, update existing workout
-                if duration_minutes > existing_workout.duration:
-                    existing_workout.duration = duration_minutes
-                    existing_workout.sport = f"Strava: {activity_type}"
-                    existing_workout.external_id = f"Strava_{strava_activity_id}"
-                    existing_workout.save()
-                    print(f"Updated workout to longer duration: {duration_minutes} min")
-                    continue
-                else:
-                    print(f"Skipping shorter duplicate workout")
-                    continue
-        
-            score = strava_points(activity_type, duration_minutes, None)
-
-
-            _, created = Sport.objects.get_or_create(
-                user=user,
-                external_id=f"Strava_{strava_activity_id}",
-                defaults={
-                    'sport': f"Strava: {activity_type}",
-                    'date': activity_date,
-                    'duration': duration_minutes,
-                    'score': score,
-                    'level': "recreational",
-                }
-            )
-            
-            if created:
-                workouts_added += 1
-                user.profile.score += score
-                user.profile.save()
-                print(f"User {user} logged {score} points")
+        name = activity.get('type', 'Unknown Activity')
+        if add_workout(user, 'Strava', activity.get('id'), name, name.lower(),
+                       parse_datetime(activity['start_date']), duration, activity.get('average_speed')):
+            workouts_added += 1
 
     connection.last_sync = timezone.now()
     connection.save(update_fields=['last_sync', 'updated_at'])
 
+    print(f"Strava sync complete: {workouts_added} workouts added")
     return {"success": True, "workouts_added": workouts_added}
 
 @csrf_exempt
@@ -1184,7 +973,6 @@ def validate_whoop_signature(request):
 
 
 
-####Automatic Add Workouts ###
 def sync_whoop_for_user(user, days_back=30):
     try:
         connection = WearableConnection.objects.get(
@@ -1227,116 +1015,20 @@ def sync_whoop_for_user(user, days_back=30):
         print(f"Failed to fetch Whoop workouts: {response.status_code} - {response.text}")
         raise Exception(f"Failed to fetch Whoop data: {response.status_code}")
 
-    data = response.json()
     workouts_added = 0
-
-    for workout in data.get('records', []):
-        # sport_id is deprecated in v2, so the map only covers payloads that still send
-        # it; sport_name is the required field and carries the same display names.
+    for workout in response.json().get('records', []):
+        if not (workout.get('start') and workout.get('end')):
+            continue
+        start = parse_datetime(workout['start'])
+        duration = int((parse_datetime(workout['end']) - start).total_seconds()) // 60
         sport_id = workout.get('sport_id')
-        sport_name = (
-            WHOOP_SPORT_IDS.get(sport_id)
-            or workout.get('sport_name')
-            or f"Sport {sport_id}"
-        )
-        # CARDIO/EXCLUDED_ACTIVITIES/INTENSITY_INCLUDED hold squashed single tokens, so
-        # drop everything but alphanumerics: "Hiking/Rucking" -> "hikingrucking"
-        activity_lower = ''.join(c for c in sport_name.lower() if c.isalnum())
-
-        whoop_workout_id = str(workout.get('id'))
-        workout_start = workout.get('start')
-        workout_end = workout.get('end')
-
-        if workout_start and workout_end:
-            start_dt = parse_datetime(workout_start)
-            end_dt = parse_datetime(workout_end)
-            duration_minutes = max(int((end_dt - start_dt).total_seconds()) // 60, 1)
-        else:
+        name = WHOOP_SPORT_IDS.get(sport_id) or workout.get('sport_name') or f"Sport {sport_id}"
+        activity = ''.join(c for c in name.lower() if c.isalnum())
+        if duration < 10 or (activity in EXCLUDED_ACTIVITIES and duration < 45):
             continue
-
-        if duration_minutes < 10:
-            continue
-
-        # Walking/hiking minimum 45 min
-        if activity_lower in EXCLUDED_ACTIVITIES and duration_minutes < 45:
-            print(f"Skipping short Whoop {sport_name} ({duration_minutes} min)")
-            continue
-
-        workout_score = workout.get('score') or {}
-        intensity = workout_score.get('strain') or 0
-        score = whoop_points(activity_lower, duration_minutes, intensity)
-        existing_cardio = Cardio.objects.filter(user=user, date=workout_start).first()
-        existing_sport = Sport.objects.filter(user=user, date=workout_start).first()
-
-        if activity_lower in CARDIO or activity_lower in EXCLUDED_ACTIVITIES:
-            # Duplicate prevention: same user + same start time
-           
-            if existing_cardio:
-                if duration_minutes > existing_cardio.duration:
-                    existing_cardio.duration = duration_minutes
-                    existing_cardio.activity = f"Whoop: {sport_name}"
-                    existing_cardio.external_id = f"whoop_{whoop_workout_id}"
-                    existing_cardio.save()
-                    print(f"Updated Whoop Cardio Workout to longer duration: {duration_minutes} min")
-                else:
-                    print("Skipping shorter duplicate Whoop Cardio Workout")
-                continue
-            
-            #duplicate sport workout already exists (Whoop bug)
-            elif existing_sport:
-                print("Skipping duplicate Cardio workout, Sport already exists")
-                continue
-
-            _, created = Cardio.objects.get_or_create(
-                user=user,
-                external_id=f"whoop_{whoop_workout_id}",
-                defaults={
-                    'activity': f"Whoop: {sport_name}",
-                    'date': workout_start,
-                    'duration': duration_minutes,
-                    'score': score,
-                }
-            )
-            if created:
-                workouts_added += 1
-                user.profile.score += score
-                user.profile.save()
-                print(f"User {user} logged {score} Whoop points.")
-
-        else:
-            #duplicate sport exists
-            if existing_sport:
-                if duration_minutes > existing_sport.duration:
-                    existing_sport.duration = duration_minutes
-                    existing_sport.sport = f"Whoop: {sport_name}"
-                    existing_sport.external_id = f"whoop_{whoop_workout_id}"
-                    existing_sport.save()
-                    print(f"Updated Whoop sport workout to longer duration: {duration_minutes} min")
-                else:
-                    print("Skipping shorter duplicate Whoop sport workout")
-                continue
-
-            #Duplicate cardio already exists
-            elif existing_cardio:
-                print("Skipping duplicate Sport workout, Cardio already exists")
-                continue
-
-            _, created = Sport.objects.get_or_create(
-                user=user,
-                external_id=f"whoop_{whoop_workout_id}",
-                defaults={
-                    'sport': f"Whoop: {sport_name}",
-                    'date': workout_start,
-                    'duration': duration_minutes,
-                    'score': score,
-                    'level': "recreational",
-                }
-            )
-            if created:
-                workouts_added += 1
-                user.profile.score += score
-                user.profile.save()
-                print(f"User {user} logged {score} Whoop points.")
+        strain = (workout.get('score') or {}).get('strain') or 0
+        if add_workout(user, 'Whoop', workout.get('id'), name, activity, start, duration, strain):
+            workouts_added += 1
 
     connection.last_sync = timezone.now()
     connection.save(update_fields=['last_sync', 'updated_at'])

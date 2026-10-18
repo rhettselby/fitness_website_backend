@@ -25,7 +25,7 @@ from profile_page.models import Profile
 from . import views
 from .models import WearableConnection
 from .views import (CONFIG_ERROR, REFRESH_FAILURE_LIMIT, TOKEN_REJECTED, TRANSIENT,
-                    TokenRefreshError, classify_refresh_failure, ensure_fresh_token,
+                    TokenRefreshError, add_workout, classify_refresh_failure, ensure_fresh_token,
                     sync_oura_for_user, sync_strava_for_user, sync_whoop_for_user)
 
 
@@ -402,3 +402,260 @@ class ConnectionStatusTests(WearableTestCase):
         self.assertTrue(data['strava'])
         self.assertEqual(data['needs_reconnect'], ['whoop'])
         self.assertEqual([c['provider'] for c in data['connections']], ['strava'])
+
+
+class AddWorkoutTests(WearableTestCase):
+    def setUp(self):
+        super().setUp()
+        self.start = timezone.now() - timedelta(hours=3)
+
+    def add(self, provider='Whoop', workout_id='1', name='Running', activity='running',
+            minutes_later=0, duration=45, intensity=10):
+        return add_workout(self.user, provider, workout_id, name, activity,
+                           self.start + timedelta(minutes=minutes_later), duration, intensity)
+
+    def points(self):
+        return Profile.objects.get(user=self.user).score
+
+    def test_new_workout_is_saved_and_scored(self):
+        self.assertTrue(self.add())
+        workout = Cardio.objects.get(user=self.user)
+        self.assertEqual((workout.activity, workout.external_id, workout.duration), ('Whoop: Running', 'whoop_1', 45))
+        self.assertEqual(workout.score, views.whoop_points('running', 45, 10))
+        self.assertEqual(self.points(), workout.score)
+
+    def test_sports_are_saved_as_sport(self):
+        self.assertTrue(self.add(name='Tennis', activity='tennis'))
+        self.assertEqual(Sport.objects.get(user=self.user).sport, 'Whoop: Tennis')
+        self.assertFalse(Cardio.objects.exists())
+
+    def test_resynced_workout_is_not_saved_or_scored_twice(self):
+        self.add()
+        self.assertFalse(self.add(minutes_later=30))
+        self.assertEqual(Cardio.objects.count(), 1)
+        self.assertEqual(self.points(), Cardio.objects.get().score)
+
+    def test_same_workout_from_another_device_is_skipped(self):
+        self.add()
+        self.assertFalse(self.add(provider='Strava', workout_id='9', name='Run', activity='run', minutes_later=4))
+        self.assertFalse(self.add(provider='Oura', workout_id='8', name='tennis', activity='tennis', minutes_later=-4))
+        self.assertEqual(Cardio.objects.count() + Sport.objects.count(), 1)
+        self.assertEqual(self.points(), Cardio.objects.get().score)
+
+    def test_longer_recording_updates_the_workout_but_not_its_points(self):
+        self.add(duration=45)
+        points = self.points()
+        self.assertFalse(self.add(provider='Strava', workout_id='9', name='Run', activity='run', duration=60))
+        workout = Cardio.objects.get()
+        self.assertEqual((workout.duration, workout.activity, workout.external_id), (60, 'Strava: Run', 'strava_9'))
+        self.assertEqual(self.points(), points)
+
+    def test_separate_workouts_on_the_same_day_are_both_saved(self):
+        self.add()
+        self.assertTrue(self.add(workout_id='2', minutes_later=60))
+        self.assertEqual(Cardio.objects.count(), 2)
+
+    def test_duplicate_window_is_five_minutes_either_side(self):
+        self.add()
+        self.assertFalse(self.add(workout_id='2', minutes_later=5))
+        self.assertFalse(self.add(workout_id='3', minutes_later=-5))
+        self.assertTrue(self.add(workout_id='4', minutes_later=6))
+        self.assertTrue(self.add(workout_id='5', minutes_later=-6))
+        self.assertEqual(Cardio.objects.count(), 3)
+
+    def test_shorter_recording_does_not_shrink_the_workout(self):
+        self.add(duration=60)
+        self.assertFalse(self.add(provider='Strava', workout_id='9', name='Run', activity='run', duration=45))
+        workout = Cardio.objects.get()
+        self.assertEqual((workout.duration, workout.activity, workout.external_id), (60, 'Whoop: Running', 'whoop_1'))
+
+    def test_longer_recording_of_a_different_type_is_left_alone(self):
+        # Whoop sometimes reports one session as both a cardio and a sport workout
+        self.add(name='Tennis', activity='tennis', duration=45)
+        self.assertFalse(self.add(workout_id='2', duration=90))
+        self.assertFalse(Cardio.objects.exists())
+        self.assertEqual(Sport.objects.get().duration, 45)
+
+    def test_other_users_workouts_are_not_duplicates(self):
+        other = User.objects.create_user(username='other', password='pw')
+        Profile.objects.create(user=other)
+        add_workout(other, 'Whoop', '1', 'Running', 'running', self.start, 45, 10)
+        self.assertTrue(self.add())
+        self.assertEqual(Cardio.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(Profile.objects.get(user=other).score, Profile.objects.get(user=self.user).score)
+
+    def test_strava_rows_saved_with_the_old_id_prefix_are_not_duplicated(self):
+        Cardio.objects.create(user=self.user, activity='Strava: Run', date=self.start, duration=30,
+                              score=130, external_id='Strava_77')
+        self.assertFalse(self.add(provider='Strava', workout_id=77, name='Run', activity='run', duration=30))
+        self.assertEqual(Cardio.objects.count(), 1)
+        self.assertEqual(self.points(), 0)
+
+    def test_points_are_added_to_the_existing_score(self):
+        Profile.objects.filter(user=self.user).update(score=500)
+        self.add()
+        self.assertEqual(self.points(), 500 + Cardio.objects.get().score)
+
+    def test_walks_are_saved_as_cardio(self):
+        self.assertTrue(self.add(name='Walking', activity='walking', duration=50))
+        workout = Cardio.objects.get()
+        self.assertEqual(workout.activity, 'Whoop: Walking')
+        self.assertEqual(workout.score, views.whoop_points('walking', 50, 10))
+
+
+class WorkoutSyncTests(WearableTestCase):
+    def test_oura_sync_saves_a_new_workout_once(self):
+        self.make_connection(device_type='oura', expired=False)
+        start = timezone.now() - timedelta(hours=3)
+        payload = {"data": [{"id": "o-1", "activity": "running", "intensity": "hard",
+                             "start_datetime": iso(start), "end_datetime": iso(start + timedelta(minutes=40))}]}
+        self.patch_http(get={'return_value': FakeResponse(200, payload)})
+
+        self.assertEqual(sync_oura_for_user(self.user, days_back=1)["workouts_added"], 1)
+        self.assertEqual(sync_oura_for_user(self.user, days_back=1)["workouts_added"], 0)
+
+        workout = Cardio.objects.get(user=self.user)
+        self.assertEqual((workout.activity, workout.external_id, workout.duration), ('Oura: running', 'oura_o-1', 40))
+        self.assertEqual(Profile.objects.get(user=self.user).score, views.oura_points('running', 40, 'hard'))
+
+    def test_strava_sync_saves_a_new_activity(self):
+        self.make_connection(device_type='strava', expired=False)
+        payload = [{"id": 77, "type": "Run", "start_date": iso(timezone.now() - timedelta(hours=3)),
+                    "moving_time": 1800, "average_speed": 3.5}]
+        self.patch_http(get={'return_value': FakeResponse(200, payload)})
+
+        self.assertEqual(sync_strava_for_user(self.user, days_back=1)["workouts_added"], 1)
+
+        workout = Cardio.objects.get(user=self.user)
+        self.assertEqual((workout.activity, workout.external_id, workout.duration), ('Strava: Run', 'strava_77', 30))
+        self.assertEqual(Profile.objects.get(user=self.user).score, views.strava_points('Run', 30, 3.5))
+
+    def test_whoop_cardio_and_sport_copies_of_one_workout_count_once(self):
+        self.make_connection(expired=False)
+        start = timezone.now() - timedelta(hours=3)
+        records = [{"id": f"w-{sport_id}", "sport_id": sport_id, "start": iso(start),
+                    "end": iso(start + timedelta(minutes=45)), "score": {"strain": 12.0}}
+                   for sport_id in (48, 0)]     # Functional Fitness + Running
+        self.patch_http(get={'return_value': FakeResponse(200, {"records": records})})
+
+        self.assertEqual(sync_whoop_for_user(self.user, days_back=1)["workouts_added"], 1)
+        self.assertEqual(Cardio.objects.count() + Sport.objects.count(), 1)
+
+    def test_whoop_short_untimed_and_brief_walking_workouts_are_skipped(self):
+        self.make_connection(expired=False)
+        now = timezone.now()
+
+        def record(workout_id, sport_id, hours_ago, minutes):
+            start = now - timedelta(hours=hours_ago)
+            return {"id": workout_id, "sport_id": sport_id, "start": iso(start),
+                    "end": iso(start + timedelta(minutes=minutes)), "score": None}
+
+        records = [record('short', 0, 10, 9), record('stroll', 63, 8, 40), record('ruck', 52, 6, 50),
+                   {"id": 'open', "sport_id": 0, "start": iso(now - timedelta(hours=4)), "end": None}]
+        self.patch_http(get={'return_value': FakeResponse(200, {"records": records})})
+
+        self.assertEqual(sync_whoop_for_user(self.user, days_back=1)["workouts_added"], 1)
+        workout = Cardio.objects.get()
+        self.assertEqual((workout.activity, workout.external_id), ('Whoop: Hiking/Rucking', 'whoop_ruck'))
+        self.assertEqual(workout.score, views.whoop_points('hikingrucking', 50, 0))
+
+    def test_oura_short_workouts_and_brief_walks_are_skipped(self):
+        self.make_connection(device_type='oura', expired=False)
+        now = timezone.now()
+
+        def workout(workout_id, activity, hours_ago, minutes):
+            start = now - timedelta(hours=hours_ago)
+            return {"id": workout_id, "activity": activity, "intensity": "easy",
+                    "start_datetime": iso(start), "end_datetime": iso(start + timedelta(minutes=minutes))}
+
+        payload = {"data": [workout('short', 'running', 10, 20), workout('stroll', 'walking', 8, 40),
+                            workout('walk', 'walking', 6, 50)]}
+        self.patch_http(get={'return_value': FakeResponse(200, payload)})
+
+        self.assertEqual(sync_oura_for_user(self.user, days_back=1)["workouts_added"], 1)
+        self.assertEqual(Cardio.objects.get().external_id, 'oura_walk')
+
+    def test_strava_short_or_untimed_activities_are_skipped(self):
+        self.make_connection(device_type='strava', expired=False)
+        now = timezone.now()
+        payload = [{"id": 1, "type": "Run", "start_date": iso(now - timedelta(hours=5)), "moving_time": 540},
+                   {"id": 2, "type": "Run", "start_date": iso(now - timedelta(hours=3)), "moving_time": None},
+                   {"id": 3, "type": "Tennis", "start_date": iso(now - timedelta(hours=1)), "moving_time": 3600}]
+        self.patch_http(get={'return_value': FakeResponse(200, payload)})
+
+        self.assertEqual(sync_strava_for_user(self.user, days_back=1)["workouts_added"], 1)
+        self.assertEqual(Sport.objects.get().external_id, 'strava_3')
+        self.assertFalse(Cardio.objects.exists())
+
+
+class TokenCheckTests(WearableTestCase):
+    def test_token_outside_the_refresh_buffer_is_not_refreshed(self):
+        self.make_connection(expires_at=timezone.now() + timedelta(minutes=3))
+        post, get = self.patch_http(get={'return_value': FakeResponse(200, {"records": []})})
+        sync_whoop_for_user(self.user, days_back=1)
+        post.assert_not_called()
+        self.assertEqual(get.call_args.kwargs['headers'], {'Authorization': 'Bearer A1'})
+
+    def test_connection_deactivated_by_another_sync_is_not_refreshed(self):
+        conn = self.make_connection(expired=True)
+        stale = WearableConnection.objects.get(pk=conn.pk)
+        WearableConnection.objects.filter(pk=conn.pk).update(is_active=False)
+        post, _ = self.patch_http()
+
+        with self.assertRaises(TokenRefreshError) as ctx:
+            ensure_fresh_token(stale, token_url='https://example/token', client_id='c',
+                               client_secret='s', provider_label='Whoop')
+
+        self.assertTrue(ctx.exception.deactivated)
+        post.assert_not_called()
+
+    def test_refresh_without_a_new_refresh_token_keeps_the_current_one(self):
+        conn = self.make_connection(device_type='strava', expired=True)
+        self.patch_http(post={'return_value': FakeResponse(200, {"access_token": "SA2"})},
+                        get={'return_value': FakeResponse(200, [])})
+
+        sync_strava_for_user(self.user, days_back=1)
+
+        conn.refresh_from_db()
+        self.assertEqual((conn.access_token, conn.refresh_token), ('SA2', 'R1'))
+        self.assertGreater(conn.expires_at, timezone.now() + timedelta(minutes=55))
+
+    def test_oura_and_strava_401_from_data_api_force_refresh_on_next_sync(self):
+        for device_type, sync, empty in (('oura', sync_oura_for_user, {"data": []}),
+                                         ('strava', sync_strava_for_user, [])):
+            with self.subTest(device_type):
+                conn = self.make_connection(device_type=device_type, expired=False)
+                post, _ = self.patch_http(post={'return_value': FakeResponse(200, REFRESH_OK)},
+                                          get={'side_effect': [FakeResponse(401, {"error": "unauthorized"}),
+                                                               FakeResponse(200, empty)]})
+
+                with self.assertRaisesMessage(Exception, "401"):
+                    sync(self.user, days_back=1)
+                post.assert_not_called()
+                conn.refresh_from_db()
+                self.assertLessEqual(conn.expires_at, timezone.now())
+                self.assertTrue(conn.is_active)
+
+                sync(self.user, days_back=1)
+                post.assert_called_once()
+                conn.refresh_from_db()
+                self.assertEqual(conn.access_token, 'A2')
+
+    def test_sync_endpoints_require_a_valid_bearer_token(self):
+        valid = str(AccessToken.for_user(self.user))
+        for name in ('wearables:sync_oura', 'wearables:sync_strava', 'wearables:sync_whoop'):
+            with self.subTest(name):
+                self.assertEqual(self.client.post(reverse(name)).status_code, 401)
+                for header in ('Bearer not-a-jwt', f'Token {valid}', 'Bearer '):
+                    resp = self.client.post(reverse(name), HTTP_AUTHORIZATION=header)
+                    self.assertEqual(resp.status_code, 401, header)
+                # authenticated but not connected: past the auth check
+                resp = self.client.post(reverse(name), HTTP_AUTHORIZATION=f'Bearer {valid}')
+                self.assertEqual(resp.status_code, 400)
+                self.assertIn('not connected', resp.json()['error'].lower())
+
+    def test_token_for_a_deleted_user_is_rejected(self):
+        token = str(AccessToken.for_user(self.user))
+        self.user.delete()
+        resp = self.client.post(reverse('wearables:sync_whoop'), HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.assertEqual(resp.status_code, 401)
